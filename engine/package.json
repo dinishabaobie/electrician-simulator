@@ -1,0 +1,14 @@
+{
+  "name": "electrician-sim-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "电工模拟器 · 电路连通性判定引擎（第一版状态模拟）",
+  "scripts": {
+    "test": "node --test",
+    "test:watch": "node --test --watch"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}
