@@ -12,6 +12,11 @@ import {
   type Edge,
   type Connection,
 } from '@xyflow/react';
+import {
+  createSmartEdge,
+  pathfindingJumpPointNoDiagonal,
+  svgDrawSmoothStepLinePath,
+} from '@tisoap/react-flow-smart-edge';
 import { CircuitNode } from './CircuitNode.tsx';
 import { CircuitCtx } from './circuitContext.ts';
 import { DEFS, defaultState } from './componentDefs.ts';
@@ -20,6 +25,13 @@ import { simulate, checkTemplate } from './engine/engine.ts';
 import type { Circuit, SimResult, CheckError } from './engine/types.ts';
 
 const nodeTypes = { circuit: CircuitNode };
+// 直角边：JPS 自动绕开元件，强制直角画法、尖角不圆
+const AutoStepEdge = createSmartEdge('step', {
+  generatePath: pathfindingJumpPointNoDiagonal,
+  drawEdge: svgDrawSmoothStepLinePath({ borderRadius: 0 }),
+  nodePadding: 20,
+});
+const edgeTypes = { staggered: AutoStepEdge };
 
 function nodeFromPreset(it: PresetItem): Node {
   return {
@@ -60,6 +72,9 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [result, setResult] = useState<SimResult | null>(null);
   const [semantic, setSemantic] = useState<CheckError[] | null>(null);
+  // 悬停描线：聚焦某根线或某个元件相连的线，其余变淡，便于在密集接线里分辨
+  const [hoverEdgeId, setHoverEdgeId] = useState<string | null>(null);
+  const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
 
   // 撤回历史：只记录结构性编辑（接线 / 删除 / 拖动），不记录开关按钮等运行操作
   const past = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -121,7 +136,7 @@ export default function App() {
   function onConnect(c: Connection) {
     snapshot();
     const next = addEdge(
-      { ...c, type: 'step', style: { stroke: wireColor(c), strokeWidth: 2 } },
+      { ...c, type: 'staggered', style: { stroke: wireColor(c), strokeWidth: 2 } },
       edges,
     );
     setEdges(next);
@@ -166,6 +181,28 @@ export default function App() {
 
   const actions = useMemo(() => ({ toggle, press }), [nodes, edges]);
 
+  // 派生展示用的线：统一用自动直角边；悬停时叠加聚焦高亮（聚焦线加粗置顶、其余变淡）。
+  // 源数据 edges 不变，判错/模拟仍用原始 edges。
+  const displayEdges = useMemo(() => {
+    const focusing = hoverEdgeId !== null || hoverNodeId !== null;
+    return edges.map((e) => {
+      if (!focusing) return { ...e, type: 'staggered' };
+      const active = hoverEdgeId
+        ? e.id === hoverEdgeId
+        : e.source === hoverNodeId || e.target === hoverNodeId;
+      return {
+        ...e,
+        type: 'staggered',
+        zIndex: active ? 1000 : 0,
+        style: {
+          ...e.style,
+          strokeWidth: active ? 4 : 2,
+          opacity: active ? 1 : 0.12,
+        },
+      };
+    });
+  }, [edges, hoverEdgeId, hoverNodeId]);
+
   const allOk =
     result &&
     result.errors.length === 0 &&
@@ -197,7 +234,7 @@ export default function App() {
             <button onClick={() => loadPractice(practice)}>↺ 重置</button>
           </div>
           <div className="tips">
-            接线：从端子（小圆点）拖到另一个端子，端子不分方向。<br />
+            接线：从端子（小圆点）拖到另一个端子，端子不分方向。线会自动绕开元件。<br />
             开关：点击切换合/断。<br />
             按钮：按住生效，松开复位。<br />
             删线：选中线后按 Delete 键。
@@ -212,15 +249,20 @@ export default function App() {
         <main className="canvas">
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={displayEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onNodeDragStart={() => snapshot()}
             onConnect={onConnect}
+            onEdgeMouseEnter={(_, edge) => setHoverEdgeId(edge.id)}
+            onEdgeMouseLeave={() => setHoverEdgeId(null)}
+            onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
+            onNodeMouseLeave={() => setHoverNodeId(null)}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
-            connectionLineType={ConnectionLineType.Step}
-            defaultEdgeOptions={{ type: 'step', style: { strokeWidth: 2 } }}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            defaultEdgeOptions={{ type: 'staggered', style: { strokeWidth: 2 } }}
             snapToGrid
             snapGrid={[16, 16]}
             fitView
