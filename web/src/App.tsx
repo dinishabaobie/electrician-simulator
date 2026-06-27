@@ -11,13 +11,12 @@ import {
   type Node,
   type Edge,
   type Connection,
+  BaseEdge,
+  getSmoothStepPath,
+  type EdgeProps,
 } from '@xyflow/react';
-import {
-  createSmartEdge,
-  pathfindingJumpPointNoDiagonal,
-  svgDrawSmoothStepLinePath,
-} from '@tisoap/react-flow-smart-edge';
 import { CircuitNode } from './CircuitNode.tsx';
+import { SchematicRef } from './SchematicRef.tsx';
 import { CircuitCtx } from './circuitContext.ts';
 import { DEFS, defaultState } from './componentDefs.ts';
 import { PRACTICES, type Practice, type PresetItem } from './presets.ts';
@@ -25,13 +24,79 @@ import { simulate, checkTemplate } from './engine/engine.ts';
 import type { Circuit, SimResult, CheckError } from './engine/types.ts';
 
 const nodeTypes = { circuit: CircuitNode };
-// 直角边：JPS 自动绕开元件，强制直角画法、尖角不圆
-const AutoStepEdge = createSmartEdge('step', {
-  generatePath: pathfindingJumpPointNoDiagonal,
-  drawEdge: svgDrawSmoothStepLinePath({ borderRadius: 0 }),
-  nodePadding: 20,
-});
-const edgeTypes = { staggered: AutoStepEdge };
+
+// 平行线错开：同向多根线各占一条「车道」(lane)。lane 越大，直角拐弯离节点越远，
+// 于是本会重叠的平行线像扇子一样阶梯散开（参考教学图 L2A/L2B/L2C 的走法）。
+const LANE_SPACING = 13;
+const LANE_MAX = 6; // 车道上限，防止线数过多时拐弯外扩太夸张
+function StaggeredEdge({
+  id, sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition, style, markerEnd, data,
+}: EdgeProps) {
+  const lane = Math.min(((data as any)?.lane ?? 0) as number, LANE_MAX);
+  const [path] = getSmoothStepPath({
+    sourceX, sourceY, targetX, targetY,
+    sourcePosition, targetPosition,
+    borderRadius: 0,
+    offset: 12 + lane * LANE_SPACING,
+  });
+  return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+}
+const edgeTypes = { staggered: StaggeredEdge };
+
+// 控制/触点线调色板：高辨识度、白底清晰，避开红(火线)蓝(零线)。
+// 每根控制线取一个独立色，密集接线交叉时也能逐根追踪（参考教学图「两台电动机顺序」）。
+const WIRE_PALETTE = [
+  '#ea580c', // 橙
+  '#16a34a', // 绿
+  '#9333ea', // 紫
+  '#0891b2', // 青
+  '#db2777', // 品红
+  '#ca8a04', // 金
+  '#0d9488', // 蓝绿
+  '#65a30d', // 黄绿
+  '#7c3aed', // 紫罗兰
+  '#b45309', // 棕
+];
+
+// 给线着色：直连电源端子的→火线/相红、零线蓝（功能色打底）；其余控制/触点线
+// 每根取一个独立色（参考「两台电动机顺序」教学图），密集接线里也能一眼追踪谁连谁。
+function computeWireColor(c: Connection, nodes: Node[], edges: Edge[]): string {
+  const isPower = (t?: string) =>
+    t === 'single_phase_power' || t === 'three_phase_power';
+  const srcType = (nodes.find((n) => n.id === c.source)?.data as any)?.type;
+  const tgtType = (nodes.find((n) => n.id === c.target)?.data as any)?.type;
+  const hot = (h?: string | null) => !!h && /^L\d?$/.test(h);
+  if ((isPower(srcType) && c.sourceHandle === 'N') || (isPower(tgtType) && c.targetHandle === 'N'))
+    return '#2563eb';
+  if ((isPower(srcType) && hot(c.sourceHandle)) || (isPower(tgtType) && hot(c.targetHandle)))
+    return '#dc2626';
+  // 控制线：按当前已有控制线数量顺序取色，使相邻新增的线颜色尽量错开
+  const controlCount = edges.filter((e) => {
+    const s = (e.style as any)?.stroke;
+    return s && s !== '#dc2626' && s !== '#2563eb';
+  }).length;
+  return WIRE_PALETTE[controlCount % WIRE_PALETTE.length];
+}
+
+// 把练习的预设接线（标准答案）构建成带配色的边，加载时直接显示连好的电路。
+function buildPresetEdges(p: Practice, nodes: Node[]): Edge[] {
+  const edges: Edge[] = [];
+  (p.wires ?? []).forEach((w, i) => {
+    const c: Connection = {
+      source: w.from[0], sourceHandle: w.from[1],
+      target: w.to[0], targetHandle: w.to[1],
+    };
+    edges.push({
+      id: `preset-${i}`,
+      source: c.source!, target: c.target!,
+      sourceHandle: c.sourceHandle, targetHandle: c.targetHandle,
+      type: 'staggered',
+      style: { stroke: computeWireColor(c, nodes, edges), strokeWidth: 2 },
+    });
+  });
+  return edges;
+}
 
 function nodeFromPreset(it: PresetItem): Node {
   return {
@@ -66,9 +131,9 @@ function buildCircuit(nodes: Node[], edges: Edge[]): Circuit {
 
 export default function App() {
   const [practice, setPractice] = useState<Practice>(PRACTICES[0]);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(
-    PRACTICES[0].items.map(nodeFromPreset),
-  );
+  const initialNodes = PRACTICES[0].items.map(nodeFromPreset);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
+  // 画布初始留空白，让学习者自己接线；正确接线由「正确答案」按钮按需画出
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [result, setResult] = useState<SimResult | null>(null);
   const [semantic, setSemantic] = useState<CheckError[] | null>(null);
@@ -119,24 +184,10 @@ export default function App() {
     );
   }
 
-  // 给直接连到电源端子的线着色：火线/相→红，零线→蓝，其余→深灰
-  function wireColor(c: Connection): string {
-    const isPower = (t?: string) =>
-      t === 'single_phase_power' || t === 'three_phase_power';
-    const srcType = (nodes.find((n) => n.id === c.source)?.data as any)?.type;
-    const tgtType = (nodes.find((n) => n.id === c.target)?.data as any)?.type;
-    const hot = (h?: string | null) => !!h && /^L\d?$/.test(h);
-    if ((isPower(srcType) && c.sourceHandle === 'N') || (isPower(tgtType) && c.targetHandle === 'N'))
-      return '#2563eb';
-    if ((isPower(srcType) && hot(c.sourceHandle)) || (isPower(tgtType) && hot(c.targetHandle)))
-      return '#dc2626';
-    return '#475569';
-  }
-
   function onConnect(c: Connection) {
     snapshot();
     const next = addEdge(
-      { ...c, type: 'staggered', style: { stroke: wireColor(c), strokeWidth: 2 } },
+      { ...c, type: 'staggered', style: { stroke: computeWireColor(c, nodes, edges), strokeWidth: 2 } },
       edges,
     );
     setEdges(next);
@@ -163,12 +214,21 @@ export default function App() {
 
   function loadPractice(p: Practice) {
     setPractice(p);
-    setEdges([]);
-    setNodes(p.items.map(nodeFromPreset));
+    const nds = p.items.map(nodeFromPreset);
+    setNodes(nds);
+    setEdges([]); // 留空白让用户自接；正确接线点「正确答案」按需显示
     setResult(null);
     setSemantic(null);
     past.current = [];
     setHistLen(0);
+  }
+
+  // 显示标准答案：把预设的正确接线画到画布上并运行（可用「撤回」还原回自己的接法）
+  function showAnswer() {
+    snapshot();
+    const eds = buildPresetEdges(practice, nodes);
+    setEdges(eds);
+    recompute(nodes, eds);
   }
 
   function check() {
@@ -185,14 +245,24 @@ export default function App() {
   // 源数据 edges 不变，判错/模拟仍用原始 edges。
   const displayEdges = useMemo(() => {
     const focusing = hoverEdgeId !== null || hoverNodeId !== null;
+    // 平行线错开：按「共享端点」给每根线排车道号——同一源引出 / 同一目标汇入的线
+    // 各占递增车道，错开走线不挤成一束。取两端拥挤度较大者作为车道号。
+    const srcSeen = new Map<string, number>();
+    const tgtSeen = new Map<string, number>();
     return edges.map((e) => {
-      if (!focusing) return { ...e, type: 'staggered' };
+      const s = srcSeen.get(e.source) ?? 0;
+      srcSeen.set(e.source, s + 1);
+      const t = tgtSeen.get(e.target) ?? 0;
+      tgtSeen.set(e.target, t + 1);
+      const data = { ...(e.data ?? {}), lane: Math.max(s, t) };
+      if (!focusing) return { ...e, type: 'staggered', data };
       const active = hoverEdgeId
         ? e.id === hoverEdgeId
         : e.source === hoverNodeId || e.target === hoverNodeId;
       return {
         ...e,
         type: 'staggered',
+        data,
         zIndex: active ? 1000 : 0,
         style: {
           ...e.style,
@@ -230,11 +300,12 @@ export default function App() {
           <div className="palette-group">
             <button className="primary" onClick={() => recompute(nodes, edges)}>▶ 运行模拟</button>
             <button onClick={check}>🔍 检查电路</button>
+            <button className="answer" onClick={showAnswer}>✅ 正确答案</button>
             <button onClick={undo} disabled={histLen === 0}>↶ 撤回</button>
             <button onClick={() => loadPractice(practice)}>↺ 重置</button>
           </div>
           <div className="tips">
-            接线：从端子（小圆点）拖到另一个端子，端子不分方向。线会自动绕开元件。<br />
+            接线：从端子（小圆点）拖到另一个端子，端子不分方向。平行线会自动错开走，不挤成一束。<br />
             开关：点击切换合/断。<br />
             按钮：按住生效，松开复位。<br />
             删线：选中线后按 Delete 键。
@@ -242,7 +313,9 @@ export default function App() {
           <div className="legend">
             <div><span className="sw" style={{ background: '#dc2626' }} />火线 / 相</div>
             <div><span className="sw" style={{ background: '#2563eb' }} />零线 N</div>
-            <div><span className="sw" style={{ background: '#475569' }} />控制 / 触点线</div>
+            <div>
+              <span className="sw sw-rainbow" />控制 / 触点线（每根独立色）
+            </div>
           </div>
         </aside>
 
@@ -270,6 +343,7 @@ export default function App() {
             <Background />
             <Controls />
           </ReactFlow>
+          <SchematicRef practiceKey={practice.key} />
         </main>
 
         <aside className="panel">

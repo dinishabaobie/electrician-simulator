@@ -36,14 +36,49 @@ body {
 .palette button.primary { background: #2f80ed; color: #fff; border-color: #2f80ed; }
 .palette button.primary:hover { background: #2768c4; }
 .palette button.active { background: #2f80ed; color: #fff; border-color: #2f80ed; }
+.palette button.answer { color: #15803d; border-color: #86c79a; }
+.palette button.answer:hover { background: #ecfdf3; }
 .goal { background: #eef4ff; border: 1px solid #cfe0ff; border-radius: 6px; padding: 8px; line-height: 1.6; }
 .tips { margin-top: 18px; font-size: 12px; color: #7b8794; line-height: 1.7; }
 .legend { margin-top: 12px; font-size: 12px; color: #52616b; }
 .legend > div { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
 .legend .sw { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
+.legend .sw-rainbow {
+  background: linear-gradient(90deg, #ea580c, #16a34a, #9333ea, #0891b2, #db2777, #ca8a04);
+}
 
 /* 画布 */
-.canvas { flex: 1; height: 100%; }
+.canvas { flex: 1; height: 100%; position: relative; }
+
+/* 右上角参考原理图 */
+.schematic-ref {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  width: 300px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #d9dee3;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.1);
+  overflow: hidden;
+}
+.schematic-ref header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid #eef1f4;
+  background: #f8fafc;
+}
+.schematic-ref header b { font-size: 13px; color: #1e293b; }
+.schematic-ref .toggle { font-size: 12px; color: #64748b; }
+.schematic-ref.collapsed header { border-bottom: none; }
+.schematic-ref .body { padding: 10px 12px 12px; }
+.schematic-ref.collapsed .body { display: none; }
+.schematic-ref svg { width: 100%; height: auto; display: block; }
 
 /* 右侧状态面板 */
 .panel {

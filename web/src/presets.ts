@@ -9,11 +9,18 @@ export interface PresetItem {
   role?: string;
 }
 
+// 预设接线：[元件id, 端子id] → [元件id, 端子id]
+export interface PresetWire {
+  from: [string, string];
+  to: [string, string];
+}
+
 export interface Practice {
   key: string;
   name: string;
   goal: string;
   items: PresetItem[];
+  wires?: PresetWire[]; // 标准答案接线，加载时自动连好（不填则空白让用户自接）
   template?: Expected; // 练习模式语义判错模板
 }
 
@@ -27,6 +34,12 @@ export const PRACTICES: Practice[] = [
       { id: 'SW', type: 'switch', x: 320, y: 90 },
       { id: 'LP', type: 'lamp', x: 320, y: 250 },
     ],
+    wires: [
+      // L → 开关 → 灯 → N
+      { from: ['PWR', 'L'], to: ['SW', 'in'] },
+      { from: ['SW', 'out'], to: ['LP', 'L'] },
+      { from: ['LP', 'N'], to: ['PWR', 'N'] },
+    ],
   },
   {
     key: 'point_control',
@@ -39,6 +52,20 @@ export const PRACTICES: Practice[] = [
       { id: 'KM_C', type: 'contactor_coil', x: 590, y: 40, groupId: 'KM1', role: 'coil' },
       { id: 'KM_M', type: 'contactor_main', x: 320, y: 260, groupId: 'KM1', role: 'main' },
       { id: 'M', type: 'motor', x: 320, y: 430, role: 'motor' },
+    ],
+    wires: [
+      // 控制回路：L1 → 停止(NC) → 启动(NO) → 线圈A1；线圈A2 → N
+      { from: ['PWR', 'L1'], to: ['SB1', 'in'] },
+      { from: ['SB1', 'out'], to: ['SB2', 'in'] },
+      { from: ['SB2', 'out'], to: ['KM_C', 'A1'] },
+      { from: ['KM_C', 'A2'], to: ['PWR', 'N'] },
+      // 主回路：三相 → 主触点 → 电机
+      { from: ['PWR', 'L1'], to: ['KM_M', 'L1'] },
+      { from: ['PWR', 'L2'], to: ['KM_M', 'L2'] },
+      { from: ['PWR', 'L3'], to: ['KM_M', 'L3'] },
+      { from: ['KM_M', 'T1'], to: ['M', 'U'] },
+      { from: ['KM_M', 'T2'], to: ['M', 'V'] },
+      { from: ['KM_M', 'T3'], to: ['M', 'W'] },
     ],
     template: {
       required: [
@@ -62,6 +89,23 @@ export const PRACTICES: Practice[] = [
       { id: 'KM_C', type: 'contactor_coil', x: 590, y: 30, groupId: 'KM1', role: 'coil' },
       { id: 'KM_M', type: 'contactor_main', x: 320, y: 280, groupId: 'KM1', role: 'main' },
       { id: 'M', type: 'motor', x: 320, y: 450, role: 'motor' },
+    ],
+    wires: [
+      // 控制回路：L1 → 停止(NC) → 启动(NO) → 线圈A1；线圈A2 → N
+      { from: ['PWR', 'L1'], to: ['SB1', 'in'] },
+      { from: ['SB1', 'out'], to: ['SB2', 'in'] },
+      { from: ['SB2', 'out'], to: ['KM_C', 'A1'] },
+      { from: ['KM_C', 'A2'], to: ['PWR', 'N'] },
+      // 自锁：辅助常开触点 KM_A 与启动按钮 SB2 并联
+      { from: ['SB1', 'out'], to: ['KM_A', 'in'] },
+      { from: ['KM_A', 'out'], to: ['KM_C', 'A1'] },
+      // 主回路：三相 → 主触点 → 电机
+      { from: ['PWR', 'L1'], to: ['KM_M', 'L1'] },
+      { from: ['PWR', 'L2'], to: ['KM_M', 'L2'] },
+      { from: ['PWR', 'L3'], to: ['KM_M', 'L3'] },
+      { from: ['KM_M', 'T1'], to: ['M', 'U'] },
+      { from: ['KM_M', 'T2'], to: ['M', 'V'] },
+      { from: ['KM_M', 'T3'], to: ['M', 'W'] },
     ],
     template: {
       required: [
