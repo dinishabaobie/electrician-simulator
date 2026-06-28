@@ -333,6 +333,7 @@ export default function App() {
             onNodeMouseLeave={() => setHoverNodeId(null)}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            nodeDragThreshold={5}
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
             defaultEdgeOptions={{ type: 'staggered', style: { strokeWidth: 2 } }}

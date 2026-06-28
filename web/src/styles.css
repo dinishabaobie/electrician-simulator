@@ -112,6 +112,9 @@ body {
 .icon-svg { display: block; }
 .node-switch, .node-button_no, .node-button_nc { cursor: pointer; }
 
+/* 图标命中区：撑满节点，既能操作也能整体拖动 */
+.node-hit { width: 100%; height: 100%; cursor: pointer; }
+
 .node-name {
   position: absolute;
   top: -18px;

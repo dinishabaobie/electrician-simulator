@@ -55,28 +55,31 @@ export function CircuitNode({ id, data }: NodeProps) {
 
   const lit = d.type === 'lamp' && d.sim?.working;
   const run = d.type === 'motor' && d.sim?.working;
-  // 可交互元件（开关/按钮）加 nodrag：React Flow v12 用 pointerdown 启动拖拽，
-  // 不加这个类的话，按在元件上会触发节点拖拽而「吃掉」点击，导致点不动。
+  // 整个节点都可拖动：靠 React Flow 的拖拽阈值（nodeDragThreshold）区分
+  // 「轻点 = 操作」和「按住拖动 = 移动」。所以这里不再加 nodrag、也不
+  // stopPropagation——否则会把拖拽事件吃掉，导致按钮拖不动。
   const isInteractive = !!(def?.toggle || def?.momentary);
-  const cls = ['node', `node-${d.type}`, lit ? 'is-lit' : '', run ? 'is-run' : '',
-    isInteractive ? 'nodrag' : ''].join(' ');
+  const cls = ['node', `node-${d.type}`, lit ? 'is-lit' : '', run ? 'is-run' : ''].join(' ');
 
   // 开关：点击切换；按钮：按住生效（松开/移出即复位）
   const interactive: Record<string, unknown> = {};
   if (def?.toggle) interactive.onClick = () => toggle(id);
   if (def?.momentary) {
-    interactive.onPointerDown = (e: React.PointerEvent) => { e.stopPropagation(); press(id, true); };
+    interactive.onPointerDown = () => press(id, true);
     interactive.onPointerUp = () => press(id, false);
     interactive.onPointerLeave = () => press(id, false);
   }
-  const title = def?.toggle ? '点击切换 合/断' : def?.momentary ? '按住生效' : '';
+  const title = def?.toggle ? '点击切换 合/断 · 按住拖动可移动'
+    : def?.momentary ? '按住生效 · 按住拖动可移动' : '';
 
   return (
-    <div className={cls} style={{ width: w, height: h }} title={title} {...interactive}>
+    <div className={cls} style={{ width: w, height: h }}>
       <span className="node-name">
         {displayName(d)}<i className="node-tag">{displayTag(d, id)}</i>
       </span>
-      <ComponentIcon nid={id} type={d.type} def={def} state={d.state} sim={d.sim} />
+      <div className="node-hit" title={title} {...interactive}>
+        <ComponentIcon nid={id} type={d.type} def={def} state={d.state} sim={d.sim} />
+      </div>
       <span className="node-status">{statusText(d)}</span>
       {def?.terminals.map((t) => (
         <Handle key={t.id} id={t.id} type="source" position={t.position}
