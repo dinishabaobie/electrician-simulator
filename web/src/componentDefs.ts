@@ -1,6 +1,6 @@
 import { Position } from '@xyflow/react';
 import type { CSSProperties } from 'react';
-import type { ComponentType } from './engine/types.ts';
+import type { ComponentType } from '../../engine/src/types.ts';
 
 export interface TermDef {
   id: string;

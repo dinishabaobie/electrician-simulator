@@ -1,4 +1,4 @@
-import type { Expected } from './engine/types.ts';
+import type { Expected } from '../../engine/src/types.ts';
 
 export interface PresetItem {
   id: string;
@@ -30,9 +30,10 @@ export const PRACTICES: Practice[] = [
     name: '单灯单控',
     goal: '接成 L → 开关 → 灯泡 → N，点开关让灯亮灭。',
     items: [
+      // 坐标经过对齐：PWR.L 与 SW.in 同行、SW.out 与 LP.L 同列，答案接线横平竖直
       { id: 'PWR', type: 'single_phase_power', x: 40, y: 160 },
-      { id: 'SW', type: 'switch', x: 320, y: 90 },
-      { id: 'LP', type: 'lamp', x: 320, y: 250 },
+      { id: 'SW', type: 'switch', x: 320, y: 144 },
+      { id: 'LP', type: 'lamp', x: 373, y: 250 },
     ],
     wires: [
       // L → 开关 → 灯 → N
@@ -49,7 +50,7 @@ export const PRACTICES: Practice[] = [
       { id: 'PWR', type: 'three_phase_power', x: 30, y: 150 },
       { id: 'SB1', type: 'button_nc', x: 250, y: 40, role: 'stop_button' },
       { id: 'SB2', type: 'button_no', x: 420, y: 40, role: 'start_button' },
-      { id: 'KM_C', type: 'contactor_coil', x: 590, y: 40, groupId: 'KM1', role: 'coil' },
+      { id: 'KM_C', type: 'contactor_coil', x: 590, y: 45, groupId: 'KM1', role: 'coil' },
       { id: 'KM_M', type: 'contactor_main', x: 320, y: 260, groupId: 'KM1', role: 'main' },
       { id: 'M', type: 'motor', x: 320, y: 430, role: 'motor' },
     ],
@@ -86,7 +87,7 @@ export const PRACTICES: Practice[] = [
       { id: 'SB1', type: 'button_nc', x: 240, y: 30, role: 'stop_button' },
       { id: 'SB2', type: 'button_no', x: 410, y: 30, role: 'start_button' },
       { id: 'KM_A', type: 'contactor_no', x: 410, y: 150, groupId: 'KM1', role: 'aux_no' },
-      { id: 'KM_C', type: 'contactor_coil', x: 590, y: 30, groupId: 'KM1', role: 'coil' },
+      { id: 'KM_C', type: 'contactor_coil', x: 590, y: 35, groupId: 'KM1', role: 'coil' },
       { id: 'KM_M', type: 'contactor_main', x: 320, y: 280, groupId: 'KM1', role: 'main' },
       { id: 'M', type: 'motor', x: 320, y: 450, role: 'motor' },
     ],

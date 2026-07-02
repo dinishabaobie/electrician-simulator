@@ -78,7 +78,7 @@ export function CircuitNode({ id, data }: NodeProps) {
         {displayName(d)}<i className="node-tag">{displayTag(d, id)}</i>
       </span>
       <div className="node-hit" title={title} {...interactive}>
-        <ComponentIcon nid={id} type={d.type} def={def} state={d.state} sim={d.sim} />
+        <ComponentIcon nid={id} type={d.type} def={def} state={d.state} sim={d.sim} tag={d.groupId} />
       </div>
       <span className="node-status">{statusText(d)}</span>
       {def?.terminals.map((t) => (

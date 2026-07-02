@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -6,6 +6,8 @@ import {
   addEdge,
   ConnectionMode,
   ConnectionLineType,
+  Position,
+  ViewportPortal,
   useNodesState,
   useEdgesState,
   type Node,
@@ -15,34 +17,50 @@ import {
   getSmoothStepPath,
   type EdgeProps,
 } from '@xyflow/react';
+import { routeAll, type Port, type RouteReq } from './routing.ts';
 import { CircuitNode } from './CircuitNode.tsx';
 import { SchematicRef } from './SchematicRef.tsx';
 import { CircuitCtx } from './circuitContext.ts';
 import { DEFS, defaultState } from './componentDefs.ts';
 import { PRACTICES, type Practice, type PresetItem } from './presets.ts';
-import { simulate, checkTemplate } from './engine/engine.ts';
-import type { Circuit, SimResult, CheckError } from './engine/types.ts';
+import { simulate, checkTemplate } from '../../engine/src/engine.ts';
+import type { Circuit, SimResult, CheckError } from '../../engine/src/types.ts';
 
 const nodeTypes = { circuit: CircuitNode };
 
-// 平行线错开：同向多根线各占一条「车道」(lane)。lane 越大，直角拐弯离节点越远，
-// 于是本会重叠的平行线像扇子一样阶梯散开（参考教学图 L2A/L2B/L2C 的走法）。
-const LANE_SPACING = 13;
-const LANE_MAX = 6; // 车道上限，防止线数过多时拐弯外扩太夸张
-function StaggeredEdge({
+// 布线边：优先用 routing.ts 算好的正交绕障路径（data.path）；
+// 个别找不到路的极端情况回退到平滑直角折线。
+function RoutedEdge({
   id, sourceX, sourceY, targetX, targetY,
   sourcePosition, targetPosition, style, markerEnd, data,
 }: EdgeProps) {
-  const lane = Math.min(((data as any)?.lane ?? 0) as number, LANE_MAX);
+  const routed = (data as any)?.path as string | undefined;
+  if (routed) return <BaseEdge id={id} path={routed} style={style} markerEnd={markerEnd} />;
   const [path] = getSmoothStepPath({
     sourceX, sourceY, targetX, targetY,
     sourcePosition, targetPosition,
-    borderRadius: 0,
-    offset: 12 + lane * LANE_SPACING,
+    borderRadius: 5,
+    offset: 12,
   });
   return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
 }
-const edgeTypes = { staggered: StaggeredEdge };
+const edgeTypes = { routed: RoutedEdge };
+
+// 端子在画布上的绝对坐标与朝向（与 DEFS 里 Handle 的百分比定位一致）
+function portOf(nodes: Node[], nodeId: string, handleId?: string | null): Port | null {
+  if (!handleId) return null;
+  const n = nodes.find((x) => x.id === nodeId);
+  const def = n && DEFS[(n.data as any).type];
+  const t = def?.terminals.find((tt) => tt.id === handleId);
+  if (!n || !def || !t) return null;
+  const pct = parseFloat((t.style.top ?? t.style.left) as string) / 100;
+  switch (t.position) {
+    case Position.Left: return { x: n.position.x, y: n.position.y + def.h * pct, side: 'left' };
+    case Position.Right: return { x: n.position.x + def.w, y: n.position.y + def.h * pct, side: 'right' };
+    case Position.Top: return { x: n.position.x + def.w * pct, y: n.position.y, side: 'top' };
+    default: return { x: n.position.x + def.w * pct, y: n.position.y + def.h, side: 'bottom' };
+  }
+}
 
 // 控制/触点线调色板：高辨识度、白底清晰，避开红(火线)蓝(零线)。
 // 每根控制线取一个独立色，密集接线交叉时也能逐根追踪（参考教学图「两台电动机顺序」）。
@@ -91,7 +109,7 @@ function buildPresetEdges(p: Practice, nodes: Node[]): Edge[] {
       id: `preset-${i}`,
       source: c.source!, target: c.target!,
       sourceHandle: c.sourceHandle, targetHandle: c.targetHandle,
-      type: 'staggered',
+      type: 'routed',
       style: { stroke: computeWireColor(c, nodes, edges), strokeWidth: 2 },
     });
   });
@@ -129,10 +147,11 @@ function buildCircuit(nodes: Node[], edges: Edge[]): Circuit {
   return { schemaVersion: 1, components, wires };
 }
 
+const INITIAL_NODES = PRACTICES[0].items.map(nodeFromPreset);
+
 export default function App() {
   const [practice, setPractice] = useState<Practice>(PRACTICES[0]);
-  const initialNodes = PRACTICES[0].items.map(nodeFromPreset);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(INITIAL_NODES);
   // 画布初始留空白，让学习者自己接线；正确接线由「正确答案」按钮按需画出
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [result, setResult] = useState<SimResult | null>(null);
@@ -157,12 +176,35 @@ export default function App() {
     setEdges(prev.edges);
     recompute(prev.nodes, prev.edges);
   }
+  // 删除节点时 React Flow 会同时回调节点删除和关联边删除，
+  // 用微任务标记去重，保证一次 Delete 只拍一张快照（撤回一步到位）。
+  const snapDone = useRef(false);
+  function snapshotOnce() {
+    if (snapDone.current) return;
+    snapDone.current = true;
+    queueMicrotask(() => (snapDone.current = false));
+    snapshot();
+  }
+  // 删除后待 React Flow 把变更写进 state，再用最终的 nodes/edges 重跑模拟，
+  // 否则剪断电线灯还亮着（结果面板/节点状态都停留在删除前）。
+  const needsRecompute = useRef(false);
+  useEffect(() => {
+    if (!needsRecompute.current) return;
+    needsRecompute.current = false;
+    recompute(nodes, edges);
+  }, [nodes, edges]);
   function handleNodesChange(changes: any[]) {
-    if (changes.some((c) => c.type === 'remove')) snapshot();
+    if (changes.some((c) => c.type === 'remove')) {
+      snapshotOnce();
+      needsRecompute.current = true;
+    }
     onNodesChange(changes);
   }
   function handleEdgesChange(changes: any[]) {
-    if (changes.some((c) => c.type === 'remove')) snapshot();
+    if (changes.some((c) => c.type === 'remove')) {
+      snapshotOnce();
+      needsRecompute.current = true;
+    }
     onEdgesChange(changes);
   }
 
@@ -187,7 +229,7 @@ export default function App() {
   function onConnect(c: Connection) {
     snapshot();
     const next = addEdge(
-      { ...c, type: 'staggered', style: { stroke: computeWireColor(c, nodes, edges), strokeWidth: 2 } },
+      { ...c, type: 'routed', style: { stroke: computeWireColor(c, nodes, edges), strokeWidth: 2 } },
       edges,
     );
     setEdges(next);
@@ -241,27 +283,57 @@ export default function App() {
 
   const actions = useMemo(() => ({ toggle, press }), [nodes, edges]);
 
-  // 派生展示用的线：统一用自动直角边；悬停时叠加聚焦高亮（聚焦线加粗置顶、其余变淡）。
+  // 正交绕障布线：节点位置或接线变化时整体重排（先布的线占道，后布的自动分道）。
+  // 用签名字符串做依赖，模拟结果写回节点（位置不变）时不会白算。
+  const posSig = nodes.map((n) => `${n.id}:${n.position.x},${n.position.y}`).join('|');
+  const edgeSig = edges.map((e) => `${e.id}:${e.source}.${e.sourceHandle}->${e.target}.${e.targetHandle}`).join('|');
+  const routes = useMemo(() => {
+    const obstacles = nodes.flatMap((n) => {
+      const def = DEFS[(n.data as any).type];
+      return def ? [{ x: n.position.x, y: n.position.y, w: def.w, h: def.h }] : [];
+    });
+    const reqs: RouteReq[] = [];
+    for (const e of edges) {
+      const from = portOf(nodes, e.source, e.sourceHandle);
+      const to = portOf(nodes, e.target, e.targetHandle);
+      if (from && to) reqs.push({ id: e.id, from, to });
+    }
+    return routeAll(reqs, obstacles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posSig, edgeSig]);
+
+  // 接点圆点：≥2 根线汇到同一端子时画实心点（电气图习惯：有点=相连，无点=交叉）
+  const junctions = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const e of edges) {
+      for (const key of [`${e.source}#${e.sourceHandle}`, `${e.target}#${e.targetHandle}`]) {
+        count.set(key, (count.get(key) ?? 0) + 1);
+      }
+    }
+    const dots: Array<{ key: string; x: number; y: number }> = [];
+    for (const [key, n] of count) {
+      if (n < 2) continue;
+      const [nid, handle] = key.split('#');
+      const p = portOf(nodes, nid, handle);
+      if (p) dots.push({ key, x: p.x, y: p.y });
+    }
+    return dots;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posSig, edgeSig]);
+
+  // 派生展示用的线：带上布线路径；悬停时叠加聚焦高亮（聚焦线加粗置顶、其余变淡）。
   // 源数据 edges 不变，判错/模拟仍用原始 edges。
   const displayEdges = useMemo(() => {
     const focusing = hoverEdgeId !== null || hoverNodeId !== null;
-    // 平行线错开：按「共享端点」给每根线排车道号——同一源引出 / 同一目标汇入的线
-    // 各占递增车道，错开走线不挤成一束。取两端拥挤度较大者作为车道号。
-    const srcSeen = new Map<string, number>();
-    const tgtSeen = new Map<string, number>();
     return edges.map((e) => {
-      const s = srcSeen.get(e.source) ?? 0;
-      srcSeen.set(e.source, s + 1);
-      const t = tgtSeen.get(e.target) ?? 0;
-      tgtSeen.set(e.target, t + 1);
-      const data = { ...(e.data ?? {}), lane: Math.max(s, t) };
-      if (!focusing) return { ...e, type: 'staggered', data };
+      const data = { ...(e.data ?? {}), path: routes.get(e.id)?.d };
+      if (!focusing) return { ...e, type: 'routed', data };
       const active = hoverEdgeId
         ? e.id === hoverEdgeId
         : e.source === hoverNodeId || e.target === hoverNodeId;
       return {
         ...e,
-        type: 'staggered',
+        type: 'routed',
         data,
         zIndex: active ? 1000 : 0,
         style: {
@@ -271,7 +343,7 @@ export default function App() {
         },
       };
     });
-  }, [edges, hoverEdgeId, hoverNodeId]);
+  }, [edges, routes, hoverEdgeId, hoverNodeId]);
 
   const allOk =
     result &&
@@ -305,7 +377,7 @@ export default function App() {
             <button onClick={() => loadPractice(practice)}>↺ 重置</button>
           </div>
           <div className="tips">
-            接线：从端子（小圆点）拖到另一个端子，端子不分方向。平行线会自动错开走，不挤成一束。<br />
+            接线：从端子（小圆点）拖到另一个端子，端子不分方向。走线自动绕开元件、平行线自动分道；实心圆点表示多线相连。<br />
             开关：点击切换合/断。<br />
             按钮：按住生效，松开复位。<br />
             删线：选中线后按 Delete 键。
@@ -325,7 +397,11 @@ export default function App() {
             edges={displayEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
-            onNodeDragStart={() => snapshot()}
+            onNodeDragStart={(_, node) => {
+              snapshot();
+              // 拖动按钮时 pointerdown 已触发「按下」，复位掉，别让电机在拖动中转起来
+              if ((node.data as any)?.state?.pressed) press(node.id, false);
+            }}
             onConnect={onConnect}
             onEdgeMouseEnter={(_, edge) => setHoverEdgeId(edge.id)}
             onEdgeMouseLeave={() => setHoverEdgeId(null)}
@@ -336,13 +412,31 @@ export default function App() {
             nodeDragThreshold={5}
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
-            defaultEdgeOptions={{ type: 'staggered', style: { strokeWidth: 2 } }}
+            defaultEdgeOptions={{ type: 'routed', style: { strokeWidth: 2 } }}
             snapToGrid
             snapGrid={[16, 16]}
             fitView
           >
             <Background />
             <Controls />
+            <ViewportPortal>
+              {junctions.map((d) => (
+                <div
+                  key={d.key}
+                  style={{
+                    position: 'absolute',
+                    left: d.x - 3.5,
+                    top: d.y - 3.5,
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: '#0f172a',
+                    pointerEvents: 'none',
+                    zIndex: 1000,
+                  }}
+                />
+              ))}
+            </ViewportPortal>
           </ReactFlow>
           <SchematicRef practiceKey={practice.key} />
         </main>

@@ -1,7 +1,7 @@
 # 电工模拟器 · 网页原型（单灯 / 点动 / 自锁）
 
 端到端原型：在浏览器里选练习、拖元件、接线、运行，看灯亮/电机转、看判错。
-界面用 Vite + React + React Flow，逻辑直接复用引擎（`src/engine/`）。
+界面用 Vite + React + React Flow，逻辑直接复用引擎（`../engine/src/`）。
 
 ## 运行
 
@@ -26,7 +26,7 @@ npm test         # 运行 web 层集成测试（自锁持久化 / 点动）
 
 ## 与引擎的关系
 
-- `src/engine/` 是从 `电工模拟器-engine` 复制来的引擎（当前为复制，后续应改为共享包避免漂移）。
+- 引擎不再复制：web 直接以相对路径引用 `../engine/src/`，单一来源，不会漂移。
 - `App.tsx` 的 `buildCircuit()` 把 React Flow 的节点/连线翻译成引擎的 `Circuit`，
   调 `simulate()`，再把 `working / errors / shorts` 映射回界面。
 

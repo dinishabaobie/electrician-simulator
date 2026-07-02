@@ -2,8 +2,8 @@
 // 每次都从 node 状态新建 Circuit（模拟 App.buildCircuit），自锁才需要把 energized 写回。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { simulate } from '../src/engine/engine.ts';
-import type { Circuit, Component } from '../src/engine/types.ts';
+import { simulate } from '../../engine/src/engine.ts';
+import type { Circuit, Component } from '../../engine/src/types.ts';
 
 const TERMS: Record<string, string[]> = {
   three_phase_power: ['L1', 'L2', 'L3', 'N'],

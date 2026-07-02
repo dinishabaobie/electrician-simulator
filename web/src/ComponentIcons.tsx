@@ -38,9 +38,11 @@ interface Props {
   def: CompDef;
   state: any;
   sim: any;
+  tag?: string; // 电工位号（接触器 groupId，如 KM1），缺省显示 KM
 }
 
-export function ComponentIcon({ nid, type, def, state, sim }: Props) {
+export function ComponentIcon({ nid, type, def, state, sim, tag }: Props) {
+  const km = tag ?? 'KM';
   const { w, h } = sizeOf(def);
   const cx = w / 2;
   const cy = h / 2;
@@ -216,7 +218,7 @@ export function ComponentIcon({ nid, type, def, state, sim }: Props) {
           <rect x={cx - 26} y={13} width={52} height={3} rx={1.5} fill="#11161c" opacity={0.5} />
           <circle cx={cx} cy={cy - 2} r={6} fill={on ? '#37e07f' : '#1c2530'} stroke={on ? '#0d6b36' : '#000'} strokeWidth={1} />
           {on && <circle cx={cx} cy={cy - 2} r={10} fill="#37e07f" opacity={0.3} />}
-          <text x={cx} y={h - 18} textAnchor="middle" fontSize="11" fontWeight="700" fill="#e5e7eb">KM</text>
+          <text x={cx} y={h - 18} textAnchor="middle" fontSize="11" fontWeight="700" fill="#e5e7eb">{km}</text>
           <circle cx={cx - 30} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
           <circle cx={cx + 30} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
           <text x={cx - 30} y={h - 2} textAnchor="middle" fontSize="7" fill="#64748b">A1</text>
@@ -244,7 +246,7 @@ export function ComponentIcon({ nid, type, def, state, sim }: Props) {
               stroke={closed ? '#37e07f' : '#7c8794'} strokeWidth={3} strokeLinecap="round" />
           ))}
           <line x1={cols[0]} y1={cy} x2={cols[2]} y2={cy} stroke="#566373" strokeWidth={1.2} strokeDasharray="3 3" />
-          <text x={14} y={cy + 3} fontSize="8" fontWeight="700" fill="#e5e7eb">KM</text>
+          <text x={14} y={cy + 3} fontSize="8" fontWeight="700" fill="#e5e7eb">{km}</text>
         </>,
         contactorDefs(g),
       );
@@ -260,7 +262,7 @@ export function ComponentIcon({ nid, type, def, state, sim }: Props) {
           <circle cx={cx + 14} cy={cy - 2} r={3} fill="#cbd5e1" />
           <line x1={cx - 14} y1={cy - 2} x2={closed ? cx + 14 : cx + 8} y2={closed ? cy - 2 : cy - 12}
             stroke={closed ? '#37e07f' : '#9aa7b3'} strokeWidth={3} strokeLinecap="round" />
-          <text x={cx} y={h - 16} textAnchor="middle" fontSize="9" fontWeight="700" fill="#e5e7eb">KM</text>
+          <text x={cx} y={h - 16} textAnchor="middle" fontSize="9" fontWeight="700" fill="#e5e7eb">{km}</text>
           <circle cx={cx - 26} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
           <circle cx={cx + 26} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
         </>,
