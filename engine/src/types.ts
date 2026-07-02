@@ -82,6 +82,7 @@ export type NodeId = string;
 export type CheckCode =
   | 'floating_terminal'
   | 'open_circuit'
+  | 'phase_loss'
   | 'short_circuit'
   | 'no_power'
   | 'wrong_type'

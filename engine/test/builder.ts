@@ -8,7 +8,7 @@ export const C = {
     id, type: 'single_phase_power', terminals: term('L', 'N'), state: { on },
   }),
   power3: (id: string, on = true): Component => ({
-    id, type: 'three_phase_power', terminals: term('L1', 'L2', 'L3', 'N', 'PE'), state: { on },
+    id, type: 'three_phase_power', terminals: term('L1', 'L2', 'L3', 'N'), state: { on },
   }),
   sw: (id: string, closed = false): Component => ({
     id, type: 'switch', terminals: term('in', 'out'), state: { closed },

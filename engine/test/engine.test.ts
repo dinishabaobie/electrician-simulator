@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, isParallel, isSeries } from '../src/engine.ts';
-import { C, w, circuit, get } from '../src/builder.ts';
+import { C, w, circuit, get } from './builder.ts';
 import type { Circuit } from '../src/types.ts';
 
 const find = (c: Circuit, r: ReturnType<typeof simulate>, id: string) =>
@@ -198,6 +198,74 @@ test('线圈经自身常闭触点供电：检测到振荡', () => {
   const r = simulate(c);
   assert.equal(r.stable, false);
   assert.equal(r.reason, 'oscillation');
+});
+
+// ---- 断路检查是结构性的：正常待机状态不误报 ----
+test('开关断开只是灯灭，不报 open_circuit（接线本身正确）', () => {
+  const c = circuit(
+    [C.power1('P'), C.sw('SW', false), C.lamp('LP')],
+    [w('P', 'L', 'SW', 'in'), w('SW', 'out', 'LP', 'L'), w('LP', 'N', 'P', 'N')],
+  );
+  const r = simulate(c);
+  assert.equal(find(c, r, 'LP').working, false);
+  assert.ok(!r.errors.some((e) => e.code === 'open_circuit'));
+});
+
+test('点动待机（未按启动）：线圈失电但不报 open_circuit', () => {
+  const r = simulate(pointControl(false));
+  assert.ok(!r.errors.some((e) => e.code === 'open_circuit'));
+  assert.ok(!r.errors.some((e) => e.code === 'phase_loss'));
+});
+
+test('灯两端都接到火线：无论怎么操作都成不了回路 → open_circuit', () => {
+  const c = circuit(
+    [C.power1('P'), C.sw('SW', true), C.lamp('LP')],
+    [
+      w('P', 'L', 'SW', 'in'),
+      w('SW', 'out', 'LP', 'L'),
+      w('P', 'L', 'LP', 'N'), // 错：N 端也接回了火线
+    ],
+  );
+  const r = simulate(c);
+  assert.equal(find(c, r, 'LP').working, false);
+  assert.ok(r.errors.some((e) => e.code === 'open_circuit' && e.componentId === 'LP'));
+});
+
+test('线圈 A2 没有回到零线：报线圈 open_circuit', () => {
+  const c = circuit(
+    [C.power1('P'), C.btnNO('SB2'), C.coil('KM_C', 'g'), C.sw('X')],
+    [
+      w('P', 'L', 'SB2', 'in'),
+      w('SB2', 'out', 'KM_C', 'A1'),
+      w('KM_C', 'A2', 'X', 'in'), // 错：A2 接到无处可去的开关上
+    ],
+  );
+  const r = simulate(c);
+  assert.ok(r.errors.some((e) => e.code === 'open_circuit' && e.componentId === 'KM_C'));
+});
+
+// ---- 三相电机缺相 / 重复相 ----
+test('电机缺相：一相没接通 → phase_loss', () => {
+  const c = pointControl(true);
+  // 拔掉 P.L3 → KM_M.L3 这根线：L3 永远到不了电机 W
+  c.wires = c.wires.filter(
+    (x) => !(x.from.componentId === 'P' && x.from.terminal === 'L3'),
+  );
+  const r = simulate(c);
+  assert.equal(find(c, r, 'M').working, false);
+  assert.ok(r.errors.some((e) => e.code === 'phase_loss' && e.componentId === 'M'));
+});
+
+test('电机两个端子接到同一相 → phase_loss（相重复）', () => {
+  const c = pointControl(true);
+  // 把 KM_M.T3 → M.W 改成 KM_M.T2 → M.W：V、W 同接 L2
+  c.wires = c.wires.filter(
+    (x) => !(x.from.componentId === 'KM_M' && x.from.terminal === 'T3'),
+  );
+  c.wires.push(w('KM_M', 'T2', 'M', 'W'));
+  const r = simulate(c);
+  assert.equal(find(c, r, 'M').working, false);
+  assert.ok(r.errors.some((e) => e.code === 'phase_loss' && e.componentId === 'M'));
 });
 
 // ---- 12：热继动作 → 电机停 ----

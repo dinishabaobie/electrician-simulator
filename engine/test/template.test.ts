@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkTemplate } from '../src/engine.ts';
-import { C, w, circuit, role } from '../src/builder.ts';
+import { C, w, circuit, role } from './builder.ts';
 import type { Circuit, Component, ComponentType, Expected } from '../src/types.ts';
 
 // 接触器自锁练习的预期结构

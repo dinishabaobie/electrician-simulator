@@ -67,25 +67,29 @@ interface Edge {
 
 const edge = (a: NodeId, b: NodeId, isLoad: boolean): Edge => ({ a, b, isLoad });
 
+// bestCase=true：把所有可操作元件（开关/按钮/触点）都视为导通，用于结构性
+// 断路检查——「无论怎么操作都成不了回路」才算接线错误。真实故障态
+// （熔断/热继动作）不参与放宽，它们造成的断路本来就该报。
 function componentEdges(
   comp: Component,
   dsu: DSU,
   coilEnergized: Map<string, boolean>,
+  bestCase = false,
 ): Edge[] {
   const n = (t: string) => nodeOf(dsu, comp.id, t);
   const coilOn = comp.groupId ? !!coilEnergized.get(comp.groupId) : false;
 
   switch (comp.type) {
     case 'switch':
-      return comp.state.closed ? [edge(n('in'), n('out'), false)] : [];
+      return bestCase || comp.state.closed ? [edge(n('in'), n('out'), false)] : [];
     case 'breaker':
-      return comp.state.closed
+      return bestCase || comp.state.closed
         ? [edge(n('in_L'), n('out_L'), false), edge(n('in_N'), n('out_N'), false)]
         : [];
     case 'button_no':
-      return comp.state.pressed ? [edge(n('in'), n('out'), false)] : [];
+      return bestCase || comp.state.pressed ? [edge(n('in'), n('out'), false)] : [];
     case 'button_nc':
-      return !comp.state.pressed ? [edge(n('in'), n('out'), false)] : [];
+      return bestCase || !comp.state.pressed ? [edge(n('in'), n('out'), false)] : [];
     case 'fuse':
       return !comp.state.blown ? [edge(n('in'), n('out'), false)] : [];
     case 'thermal_main':
@@ -93,11 +97,11 @@ function componentEdges(
     case 'thermal_nc':
       return !comp.state.tripped ? [edge(n('in'), n('out'), false)] : [];
     case 'contactor_no':
-      return coilOn ? [edge(n('in'), n('out'), false)] : [];
+      return bestCase || coilOn ? [edge(n('in'), n('out'), false)] : [];
     case 'contactor_nc':
-      return !coilOn ? [edge(n('in'), n('out'), false)] : [];
+      return bestCase || !coilOn ? [edge(n('in'), n('out'), false)] : [];
     case 'contactor_main':
-      return coilOn
+      return bestCase || coilOn
         ? [
             edge(n('L1'), n('T1'), false),
             edge(n('L2'), n('T2'), false),
@@ -229,6 +233,16 @@ const fp = (coil: Map<string, boolean>): string =>
 
 const MAX_ITER = 20;
 
+// U/V/W 与 L1/L2/L3 的全部对应关系：任一相序都算「转」（§5.4）
+const PERMS = [
+  [0, 1, 2],
+  [0, 2, 1],
+  [1, 0, 2],
+  [1, 2, 0],
+  [2, 0, 1],
+  [2, 1, 0],
+];
+
 export function simulate(c: Circuit): SimResult {
   const dsu = buildNodes(c);
 
@@ -265,6 +279,10 @@ export function simulate(c: Circuit): SimResult {
     coil = s.newCoil;
   }
   if (!stable && !reason) reason = 'max_iter';
+  // 失稳（振荡/超迭代）时跳出循环的 finalStep 是用上一轮线圈状态算的，
+  // 与最终 coil 不一致，会显示「线圈得电但触点断开」之类的矛盾状态；
+  // 用最终 coil 再算一轮，保证输出自洽。
+  if (!stable) finalStep = step(c, dsu, coil);
 
   return buildResult(c, dsu, finalStep, coil, stable, reason);
 }
@@ -284,14 +302,6 @@ function buildResult(
   const reachL2 = reachFrom('L2');
   const reachL3 = reachFrom('L3');
   const phaseReaches = [reachL1, reachL2, reachL3];
-  const PERMS = [
-    [0, 1, 2],
-    [0, 2, 1],
-    [1, 0, 2],
-    [1, 2, 0],
-    [2, 0, 1],
-    [2, 1, 0],
-  ];
 
   const motorRuns = (comp: Component): boolean => {
     if (comp.rules?.motorMode === 'simplified') {
@@ -427,25 +437,73 @@ function checkGeneral(
     }
   }
 
-  // 断路：负载两端都接了线，却无法分别到达电源两极，且非短路
+  // 断路（结构性）：把所有开关/按钮/触点都视为接通再判可达。
+  // 只有「无论怎么操作都成不了回路」才报错，开关没合、接触器未吸合等
+  // 正常待机状态不算接线错误。
   if (s.ps.length > 0 && !hasShort) {
+    const bestEdges = c.components.flatMap((comp) =>
+      componentEdges(comp, dsu, new Map(), true),
+    );
+    const bestAdj = adjacency(bestEdges, true);
+    const reachBest = (pots: string[]) =>
+      bfs(s.ps.filter((p) => pots.includes(p.potential)).map((p) => p.node), bestAdj);
+    const bestHot = reachBest(['L', 'L1', 'L2', 'L3']);
+    const bestN = reachBest(['N']);
+    const bestPhases = [reachBest(['L1']), reachBest(['L2']), reachBest(['L3'])];
+
+    const wired = (id: string, terms: string[]) =>
+      terms.every((t) => referenced.has(pin(id, t)));
+
     for (const comp of c.components) {
-      if (comp.type !== 'lamp' && comp.type !== 'indicator') continue;
-      const a = nodeOf(dsu, comp.id, 'L');
-      const b = nodeOf(dsu, comp.id, 'N');
-      const bothWired =
-        referenced.has(pin(comp.id, 'L')) && referenced.has(pin(comp.id, 'N'));
-      const works =
-        (s.reachHot.has(a) && s.reachN.has(b)) ||
-        (s.reachHot.has(b) && s.reachN.has(a));
-      const oneSideLive =
-        s.reachHot.has(a) || s.reachN.has(a) || s.reachHot.has(b) || s.reachN.has(b);
-      if (bothWired && !works && oneSideLive) {
-        errors.push({
-          code: 'open_circuit',
-          componentId: comp.id,
-          message: `用电器 ${comp.name ?? comp.id} 未能形成完整回路，无法工作。`,
-        });
+      // 两端负载：灯 / 指示灯 / 接触器线圈 / 简化电机
+      let pair: [string, string] | undefined;
+      if (comp.type === 'lamp' || comp.type === 'indicator') pair = ['L', 'N'];
+      else if (comp.type === 'contactor_coil') pair = ['A1', 'A2'];
+      else if (comp.type === 'motor' && comp.rules?.motorMode === 'simplified')
+        pair = ['U', 'V'];
+
+      if (pair) {
+        if (!wired(comp.id, pair)) continue; // 悬空已单独报
+        const a = nodeOf(dsu, comp.id, pair[0]);
+        const b = nodeOf(dsu, comp.id, pair[1]);
+        const possible =
+          (bestHot.has(a) && bestN.has(b)) || (bestHot.has(b) && bestN.has(a));
+        if (!possible) {
+          errors.push({
+            code: 'open_circuit',
+            componentId: comp.id,
+            message:
+              comp.type === 'contactor_coil'
+                ? `接触器线圈 ${comp.name ?? comp.id} 无法形成回路（怎么操作都不会得电），检查 A1/A2 接线。`
+                : `用电器 ${comp.name ?? comp.id} 无法形成完整回路，检查两端接线。`,
+          });
+        }
+        continue;
+      }
+
+      // 三相电机：主回路未接通 / 缺相 / 接了重复相
+      if (comp.type === 'motor') {
+        if (!wired(comp.id, ['U', 'V', 'W'])) continue;
+        const t = ['U', 'V', 'W'].map((x) => nodeOf(dsu, comp.id, x));
+        const canRun = PERMS.some((p) => t.every((node, i) => bestPhases[p[i]].has(node)));
+        if (canRun) continue;
+        const hits = t.filter((node) => bestPhases.some((ph) => ph.has(node))).length;
+        if (hits === 0) {
+          errors.push({
+            code: 'open_circuit',
+            componentId: comp.id,
+            message: `电机 ${comp.name ?? comp.id} 的主回路未接通，三相电都到不了电机端子。`,
+          });
+        } else {
+          errors.push({
+            code: 'phase_loss',
+            componentId: comp.id,
+            message:
+              hits < 3
+                ? `电机 ${comp.name ?? comp.id} 缺相：只有部分相电能到达端子，三相电机无法正常启动（实际中会烧毁电机）。`
+                : `电机 ${comp.name ?? comp.id} 有端子接到了同一相上，三相不齐，无法正常启动。`,
+          });
+        }
       }
     }
   }
