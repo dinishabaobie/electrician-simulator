@@ -13,6 +13,11 @@ export const C = {
   sw: (id: string, closed = false): Component => ({
     id, type: 'switch', terminals: term('in', 'out'), state: { closed },
   }),
+  breaker3: (id: string, closed = false): Component => ({
+    id, type: 'breaker3',
+    terminals: term('in_L1', 'in_L2', 'in_L3', 'out_L1', 'out_L2', 'out_L3'),
+    state: { closed },
+  }),
   btnNO: (id: string, pressed = false): Component => ({
     id, type: 'button_no', terminals: term('in', 'out'), state: { pressed },
   }),
@@ -44,6 +49,26 @@ export const C = {
   thermalMain: (id: string, tripped = false): Component => ({
     id, type: 'thermal_main',
     terminals: term('L1', 'T1', 'L2', 'T2', 'L3', 'T3'), state: { tripped },
+  }),
+  // ---- v2 电压模型元件 ----
+  transformer3: (id: string, tapVolts: number[] = [60, 45, 30]): Component => ({
+    id, type: 'transformer3',
+    terminals: term('L1', 'L2', 'L3', 'R1', 'S1', 'T1', 'R2', 'S2', 'T2', 'R3', 'S3', 'T3'),
+    state: {}, rules: { tapVolts },
+  }),
+  rectifier3: (id: string): Component => ({
+    id, type: 'rectifier3',
+    terminals: term('L1', 'L2', 'L3', 'DC+', 'DC-'), state: {},
+  }),
+  dcMotor: (id: string, ratedV = 81): Component => ({
+    id, type: 'dc_motor', terminals: term('DC+', 'DC-'),
+    state: {}, rules: { isLoad: true, ratedV },
+  }),
+  ammeter: (id: string): Component => ({
+    id, type: 'ammeter', terminals: term('in', 'out'), state: {},
+  }),
+  voltmeter: (id: string): Component => ({
+    id, type: 'voltmeter', terminals: term('in', 'out'), state: {},
   }),
 };
 

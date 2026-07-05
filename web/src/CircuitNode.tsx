@@ -28,13 +28,23 @@ function displayName(d: any): string {
     case 'motor_m1': return '电机 M1';
     case 'motor_m2': return '电机 M2';
     case 'delay': return 'KT1 延时触点';
+    case 'timer': return '时间继电器 ZN96';
+    case 'jx': return '接线端子排';
+    case 'pe': return '保护接地';
+    case 'shunt_r': return '分流器';
     case 'sel_km2': return '选挡开关(KM2 挡)';
     case 'sel_km3': return '选挡开关(KM3 挡)';
     case 'nc_of_km2': return 'KM2 常闭·互锁';
     case 'nc_of_km3': return 'KM3 常闭·互锁';
     case 'coil_km2': case 'coil_km3': return '接触器线圈';
     case 'main_km2': case 'main_km3': return '主触点';
-    case 'traction_motor': return '牵引电机(示意)';
+    case 'traction_motor': return '直流牵引电机';
+    case 'main_breaker': return '电源总开关';
+    case 'ctrl_breaker': return '控制断路器';
+    case 'transformer': return '三相变压器';
+    case 'rectifier': return '整流桥';
+    case 'ammeter': return '电流表';
+    case 'voltmeter': return '电压表';
   }
   return DEFS[d.type]?.label ?? d.type;
 }
@@ -52,6 +62,9 @@ function statusText(d: any): string {
       return d.state?.on === false ? '断电' : '有电';
     case 'switch':
       return d.state?.closed ? '合' : '断';
+    case 'breaker':
+    case 'breaker3':
+      return d.state?.closed ? '合闸' : '分闸';
     case 'button_no':
     case 'button_nc':
       return d.state?.pressed ? '按下' : '松开';
@@ -67,6 +80,19 @@ function statusText(d: any): string {
     case 'motor':
     case 'fan':
       return sim.working ? '运行' : '停止';
+    case 'dc_motor':
+      return sim.working ? `运行 ${sim.speedPct ?? 0}% · ${sim.volts ?? 0}V` : '停止';
+    case 'ammeter':
+      return `${sim.amps ?? 0} A`;
+    case 'voltmeter':
+      return `${sim.volts ?? 0} V`;
+    case 'timer_coil': {
+      if (!sim.energized) return '未计时';
+      const remain = d.state?.remain as number | undefined;
+      return remain !== undefined && remain > 0 ? `计时中 ${remain}s` : '延时到';
+    }
+    case 'timer_no':
+      return sim.closed ? '闭合' : '断开';
     case 'thermal_main':
     case 'thermal_nc':
       return d.state?.tripped ? '已动作' : '正常';

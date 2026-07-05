@@ -35,14 +35,36 @@ function RoutedEdge({
   sourcePosition, targetPosition, style, markerEnd, data,
 }: EdgeProps) {
   const routed = (data as any)?.path as string | undefined;
-  if (routed) return <BaseEdge id={id} path={routed} style={style} markerEnd={markerEnd} />;
+  const label = (data as any)?.label as string | undefined;
+  const pos = (data as any)?.labelPos as { x: number; y: number } | undefined;
+  // 线号/线径标注：白底描边小字，画在走线中点
+  const tag = label && pos && (
+    <text x={pos.x} y={pos.y - 4} textAnchor="middle" fontSize={10} fontWeight={600}
+      fill="#475569" stroke="#ffffff" strokeWidth={3} paintOrder="stroke"
+      style={{ pointerEvents: 'none' }}>
+      {label}
+    </text>
+  );
+  if (routed) {
+    return (
+      <>
+        <BaseEdge id={id} path={routed} style={style} markerEnd={markerEnd} />
+        {tag}
+      </>
+    );
+  }
   const [path] = getSmoothStepPath({
     sourceX, sourceY, targetX, targetY,
     sourcePosition, targetPosition,
     borderRadius: 5,
     offset: 12,
   });
-  return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+  return (
+    <>
+      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      {tag}
+    </>
+  );
 }
 const edgeTypes = { routed: RoutedEdge };
 
@@ -111,6 +133,7 @@ function buildPresetEdges(p: Practice, nodes: Node[]): Edge[] {
       sourceHandle: c.sourceHandle, targetHandle: c.targetHandle,
       type: 'routed',
       style: { stroke: computeWireColor(c, nodes, edges), strokeWidth: 2 },
+      data: w.label ? { label: w.label } : undefined,
     });
   });
   return edges;
@@ -162,6 +185,13 @@ export default function App() {
   // 侧栏折叠：收起左侧操作栏 / 右侧状态栏，给画布让出全部宽度
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(true);
+
+  // 时间继电器（ZN96）：引擎判「本体得电」，UI 负责计时——得电后倒数，
+  // 到点把同组延时触点闭合并重算；本体失电立即复位（断开触点、清计时）。
+  const TIMER_DELAY = 5; // 秒
+  const timersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const nodesRef = useRef<Node[]>([]);
+  const edgesRef = useRef<Edge[]>([]);
 
   // 撤回历史：只记录结构性编辑（接线 / 删除 / 拖动），不记录开关按钮等运行操作
   const past = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -271,6 +301,7 @@ export default function App() {
   }
 
   function loadPractice(p: Practice) {
+    clearAllTimers();
     setPractice(p);
     const nds = p.items.map(nodeFromPreset);
     setNodes(nds);
@@ -298,6 +329,89 @@ export default function App() {
   }
 
   const actions = useMemo(() => ({ toggle, press }), [nodes, edges]);
+
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
+
+  function clearTimer(gid: string) {
+    const t = timersRef.current.get(gid);
+    if (t !== undefined) {
+      clearInterval(t);
+      timersRef.current.delete(gid);
+    }
+  }
+  function clearAllTimers() {
+    for (const t of timersRef.current.values()) clearInterval(t);
+    timersRef.current.clear();
+  }
+
+  // 观察模拟结果，驱动各 ZN96 的计时状态机
+  useEffect(() => {
+    if (!result) return;
+    const byId = new Map(result.components.map((c) => [c.id, c]));
+    for (const coilNode of nodes) {
+      const d = coilNode.data as any;
+      if (d.type !== 'timer_coil') continue;
+      const gid = (d.groupId as string) ?? coilNode.id;
+      const energized = !!byId.get(coilNode.id)?.energized;
+      const running = timersRef.current.has(gid);
+      const contactClosed = nodes.some((x) => {
+        const xd = x.data as any;
+        return xd.type === 'timer_no' && xd.groupId === gid && xd.state?.closed;
+      });
+
+      if (energized && !contactClosed && !running) {
+        // 开始计时：每秒更新剩余秒数，到 0 闭合同组延时触点并重算
+        let remain = TIMER_DELAY;
+        const setRemain = (v: number | undefined) =>
+          setNodes((nds) =>
+            nds.map((n) =>
+              n.id === coilNode.id
+                ? { ...n, data: { ...n.data, state: { ...(n.data as any).state, remain: v } } }
+                : n,
+            ),
+          );
+        setRemain(remain);
+        const int = setInterval(() => {
+          remain -= 1;
+          if (remain > 0) {
+            setRemain(remain);
+            return;
+          }
+          clearTimer(gid);
+          const next = nodesRef.current.map((n) => {
+            const nd = n.data as any;
+            if (nd.type === 'timer_no' && nd.groupId === gid) {
+              return { ...n, data: { ...nd, state: { ...nd.state, closed: true } } };
+            }
+            if (n.id === coilNode.id) {
+              return { ...n, data: { ...nd, state: { ...nd.state, remain: 0 } } };
+            }
+            return n;
+          });
+          recompute(next, edgesRef.current);
+        }, 1000);
+        timersRef.current.set(gid, int);
+      }
+
+      if (!energized && (running || contactClosed)) {
+        // 断电复位：停计时、断开触点、清剩余秒数
+        clearTimer(gid);
+        const next = nodesRef.current.map((n) => {
+          const nd = n.data as any;
+          if (nd.type === 'timer_no' && nd.groupId === gid && nd.state?.closed) {
+            return { ...n, data: { ...nd, state: { ...nd.state, closed: false } } };
+          }
+          if (n.id === coilNode.id && nd.state?.remain !== undefined) {
+            return { ...n, data: { ...nd, state: { ...nd.state, remain: undefined } } };
+          }
+          return n;
+        });
+        recompute(next, edgesRef.current);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
 
   // 正交绕障布线：节点位置或接线变化时整体重排（先布的线占道，后布的自动分道）。
   // 用签名字符串做依赖，模拟结果写回节点（位置不变）时不会白算。
@@ -342,7 +456,13 @@ export default function App() {
   const displayEdges = useMemo(() => {
     const focusing = hoverEdgeId !== null || hoverNodeId !== null;
     return edges.map((e) => {
-      const data = { ...(e.data ?? {}), path: routes.get(e.id)?.d };
+      const rt = routes.get(e.id);
+      const data: Record<string, unknown> = { ...(e.data ?? {}), path: rt?.d };
+      // 线号标注位置：走线折线的中间顶点
+      if ((e.data as any)?.label && rt?.points?.length) {
+        const mid = rt.points[Math.floor(rt.points.length / 2)];
+        data.labelPos = { x: mid.x, y: mid.y };
+      }
       if (!focusing) return { ...e, type: 'routed', data };
       const active = hoverEdgeId
         ? e.id === hoverEdgeId

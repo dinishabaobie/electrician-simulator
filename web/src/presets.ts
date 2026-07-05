@@ -9,10 +9,11 @@ export interface PresetItem {
   role?: string;
 }
 
-// 预设接线：[元件id, 端子id] → [元件id, 端子id]
+// 预设接线：[元件id, 端子id] → [元件id, 端子id]；label = 线号/线径标注（如 '101'、'16mm²'）
 export interface PresetWire {
   from: [string, string];
   to: [string, string];
+  label?: string;
 }
 
 export interface Practice {
@@ -353,89 +354,135 @@ export const PRACTICES: Practice[] = [
   {
     key: 'traction',
     name: '牵引机控制回路',
-    goal: '火车牵引机（简化）：HL1~3 电源指示；合 KT1（模拟延时到）→ 按 SB1 → KM1 吸合自锁、风机 MF1/MF2 转；SA2 选挡使 KM2 或 KM3 吸合（互锁，永不同时）；KM1 与任一挡都吸合时牵引电机才转。变压/整流为示意，不参与模拟。',
+    goal: '火车牵引机（简化）：先合 QF1（主电源，HL1~3 亮）再合 QF2（控制电源）→ ZN96 时间继电器自动计时 5 秒，到点 KT1 延时触点自动闭合 → 按 SB1 → KM1 吸合自锁、风机 MF1/MF2 转；SA2 选挡使 KM2 或 KM3 吸合（互锁）；KM1 与任一挡都吸合时牵引电机才转。电压真模拟：KM2=60V 抽头→直流 81V 全速；KM3=30V 抽头→40.5V 半速；PA1/PV1 真实读数。断 QF2 计时复位。',
     items: [
       { id: 'PWR', type: 'three_phase_power', x: 30, y: 30 },
-      // 电源指示灯：电源正下方一列，就近取三相
-      { id: 'HL1', type: 'indicator', x: 60, y: 200, role: 'pilot1' },
-      { id: 'HL2', type: 'indicator', x: 60, y: 320, role: 'pilot2' },
-      { id: 'HL3', type: 'indicator', x: 60, y: 440, role: 'pilot3' },
+      // 进线：JX1 接线端子排 + PE 保护接地（装饰层）
+      { id: 'JX1', type: 'terminal_block', x: 180, y: 20, role: 'jx' },
+      { id: 'PE', type: 'earth', x: 196, y: 240, role: 'pe' },
+      // 断路器：QF1 三相总开关；QF2 控制回路二相空开
+      { id: 'QF1', type: 'breaker3', x: 340, y: 40, role: 'main_breaker' },
+      { id: 'QF2', type: 'breaker', x: 356, y: 190, role: 'ctrl_breaker' },
+      // 电源指示灯：QF1 之后、电源下方一列，就近取三相
+      { id: 'HL1', type: 'indicator', x: 60, y: 220, role: 'pilot1' },
+      { id: 'HL2', type: 'indicator', x: 60, y: 340, role: 'pilot2' },
+      { id: 'HL3', type: 'indicator', x: 60, y: 460, role: 'pilot3' },
       // 启动控制行：SB1(NO) ∥ KM1 自锁 → SB2(NC) → KT1 延时触点 → KM1 线圈 ∥ 风机
-      { id: 'SB1', type: 'button_no', x: 280, y: 40, role: 'start_button' },
-      { id: 'KM1_A', type: 'contactor_no', x: 280, y: 170, groupId: 'KM1', role: 'aux_no' },
-      { id: 'SB2', type: 'button_nc', x: 430, y: 40, role: 'stop_button' },
-      { id: 'KT1', type: 'switch', x: 560, y: 51, role: 'delay' },
-      { id: 'KM1_C', type: 'contactor_coil', x: 700, y: 45, groupId: 'KM1', role: 'coil' },
-      { id: 'MF1', type: 'fan', x: 890, y: 30, role: 'fan1' },
-      { id: 'MF2', type: 'fan', x: 1020, y: 30, role: 'fan2' },
+      { id: 'SB1', type: 'button_no', x: 500, y: 40, role: 'start_button' },
+      { id: 'KM1_A', type: 'contactor_no', x: 500, y: 170, groupId: 'KM1', role: 'aux_no' },
+      { id: 'SB2', type: 'button_nc', x: 650, y: 40, role: 'stop_button' },
+      { id: 'KT1', type: 'timer_no', x: 770, y: 48, groupId: 'KT1', role: 'delay' },
+      { id: 'KT1_B', type: 'timer_coil', x: 640, y: 168, groupId: 'KT1', role: 'timer' },
+      { id: 'KM1_C', type: 'contactor_coil', x: 900, y: 45, groupId: 'KM1', role: 'coil' },
+      { id: 'MF1', type: 'fan', x: 1060, y: 30, role: 'fan1' },
+      { id: 'MF2', type: 'fan', x: 1190, y: 30, role: 'fan2' },
       // 选挡两行：与 SB1 同列（火线竖向串接），线圈 A2 与 KM1 线圈对齐成零线母线
-      { id: 'SA2_1', type: 'switch', x: 280, y: 300, role: 'sel_km2' },
-      { id: 'KM3_NC', type: 'contactor_nc', x: 500, y: 296, groupId: 'KM3', role: 'nc_of_km3' },
-      { id: 'KM2_C', type: 'contactor_coil', x: 700, y: 294, groupId: 'KM2', role: 'coil_km2' },
-      { id: 'SA2_2', type: 'switch', x: 280, y: 460, role: 'sel_km3' },
-      { id: 'KM2_NC', type: 'contactor_nc', x: 500, y: 456, groupId: 'KM2', role: 'nc_of_km2' },
-      { id: 'KM3_C', type: 'contactor_coil', x: 700, y: 454, groupId: 'KM3', role: 'coil_km3' },
-      // 主回路（示意）：电源下方左侧走廊直落
-      { id: 'KM1_M', type: 'contactor_main', x: 140, y: 640, groupId: 'KM1', role: 'main' },
-      { id: 'KM2_M', type: 'contactor_main', x: 60, y: 810, groupId: 'KM2', role: 'main_km2' },
-      { id: 'KM3_M', type: 'contactor_main', x: 300, y: 810, groupId: 'KM3', role: 'main_km3' },
-      { id: 'M', type: 'motor', x: 170, y: 980, role: 'traction_motor' },
+      { id: 'SA2_1', type: 'switch', x: 500, y: 300, role: 'sel_km2' },
+      { id: 'KM3_NC', type: 'contactor_nc', x: 700, y: 296, groupId: 'KM3', role: 'nc_of_km3' },
+      { id: 'KM2_C', type: 'contactor_coil', x: 900, y: 294, groupId: 'KM2', role: 'coil_km2' },
+      { id: 'SA2_2', type: 'switch', x: 500, y: 460, role: 'sel_km3' },
+      { id: 'KM2_NC', type: 'contactor_nc', x: 700, y: 456, groupId: 'KM2', role: 'nc_of_km2' },
+      { id: 'KM3_C', type: 'contactor_coil', x: 900, y: 454, groupId: 'KM3', role: 'coil_km3' },
+      // 主回路（示意）：QF1 → KM1 → T1 变压器（摆设）→ KM2/KM3 选挡 → 电机
+      { id: 'KM1_M', type: 'contactor_main', x: 140, y: 660, groupId: 'KM1', role: 'main' },
+      { id: 'T1', type: 'transformer', x: 140, y: 830, role: 'transformer' },
+      { id: 'KM2_M', type: 'contactor_main', x: 60, y: 1040, groupId: 'KM2', role: 'main_km2' },
+      { id: 'KM3_M', type: 'contactor_main', x: 300, y: 1040, groupId: 'KM3', role: 'main_km3' },
+      // 整流与检测（v2 真元件）：整流桥出直流，分流器+电流表串联，电压表跨接
+      { id: 'RECT', type: 'rectifier', x: 170, y: 1210, role: 'rectifier' },
+      { id: 'RS1', type: 'shunt', x: 30, y: 1290, role: 'shunt_r' },
+      { id: 'PA1', type: 'ammeter', x: 100, y: 1380, role: 'ammeter' },
+      { id: 'PV1', type: 'voltmeter', x: 340, y: 1300, role: 'voltmeter' },
+      { id: 'M', type: 'dc_motor', x: 170, y: 1520, role: 'traction_motor' },
     ],
     wires: [
-      // 电源指示：相线就近直落，零线在灯之间竖向串接
-      { from: ['PWR', 'L1'], to: ['HL1', 'L'] },
-      { from: ['PWR', 'L2'], to: ['HL2', 'L'] },
-      { from: ['PWR', 'L3'], to: ['HL3', 'L'] },
-      { from: ['PWR', 'N'], to: ['HL1', 'N'] },
+      // 进线：三相+零线 经 JX1 端子排（16mm²）；PE 接地
+      { from: ['PWR', 'L1'], to: ['JX1', 'in_L1'], label: '16mm²' },
+      { from: ['PWR', 'L2'], to: ['JX1', 'in_L2'] },
+      { from: ['PWR', 'L3'], to: ['JX1', 'in_L3'] },
+      { from: ['PWR', 'N'], to: ['JX1', 'in_N'] },
+      { from: ['JX1', 'in_PE'], to: ['PE', 'T'] },
+      // JX1 → QF1
+      { from: ['JX1', 'out_L1'], to: ['QF1', 'in_L1'] },
+      { from: ['JX1', 'out_L2'], to: ['QF1', 'in_L2'] },
+      { from: ['JX1', 'out_L3'], to: ['QF1', 'in_L3'] },
+      // 电源指示：QF1 出线就近直落，零线在灯之间竖向串接
+      { from: ['QF1', 'out_L1'], to: ['HL1', 'L'] },
+      { from: ['QF1', 'out_L2'], to: ['HL2', 'L'] },
+      { from: ['QF1', 'out_L3'], to: ['HL3', 'L'] },
+      { from: ['JX1', 'out_N'], to: ['HL1', 'N'] },
       { from: ['HL1', 'N'], to: ['HL2', 'N'] },
       { from: ['HL2', 'N'], to: ['HL3', 'N'] },
-      // 火线母线：L1 → SB1，往下逐个串接（同一电气节点，走线短）
-      { from: ['PWR', 'L1'], to: ['SB1', 'in'] },
+      // 控制电源：QF1 出线一相 + 零线 → QF2（二相空开同时分断火零）
+      { from: ['QF1', 'out_L1'], to: ['QF2', 'in_L'] },
+      { from: ['JX1', 'out_N'], to: ['QF2', 'in_N'] },
+      // 火线母线：QF2 出线 → SB1，往下逐个串接（同一电气节点，走线短）
+      { from: ['QF2', 'out_L'], to: ['SB1', 'in'], label: '100' },
+      // ZN96 本体：合 QF2 即得电开始计时（7 接火线母线，8 回零线母线）
+      { from: ['SB1', 'in'], to: ['KT1_B', '7'] },
+      { from: ['KT1_B', '8'], to: ['KM1_C', 'A2'] },
       { from: ['SB1', 'in'], to: ['KM1_A', 'in'] },
       { from: ['KM1_A', 'in'], to: ['SA2_1', 'in'] },
       { from: ['SA2_1', 'in'], to: ['SA2_2', 'in'] },
       // 启动控制链
       { from: ['KM1_A', 'out'], to: ['SB2', 'in'] },
-      { from: ['SB1', 'out'], to: ['SB2', 'in'] },
-      { from: ['SB2', 'out'], to: ['KT1', 'in'] },
-      { from: ['KT1', 'out'], to: ['KM1_C', 'A1'] },
+      { from: ['SB1', 'out'], to: ['SB2', 'in'], label: '101' },
+      { from: ['SB2', 'out'], to: ['KT1', 'in'], label: '102' },
+      { from: ['KT1', 'out'], to: ['KM1_C', 'A1'], label: '103' },
       // 风机与 KM1 线圈并联（火线、零线各自串接）
       { from: ['KT1', 'out'], to: ['MF1', 'U'] },
       { from: ['MF1', 'U'], to: ['MF2', 'U'] },
       { from: ['KM1_C', 'A2'], to: ['MF1', 'V'] },
       { from: ['MF1', 'V'], to: ['MF2', 'V'] },
       // 选挡互锁两支路
-      { from: ['SA2_1', 'out'], to: ['KM3_NC', 'in'] },
-      { from: ['KM3_NC', 'out'], to: ['KM2_C', 'A1'] },
-      { from: ['SA2_2', 'out'], to: ['KM2_NC', 'in'] },
-      { from: ['KM2_NC', 'out'], to: ['KM3_C', 'A1'] },
-      // 零线母线：三个线圈 A2 对齐竖向串接，只留一根回电源 N
+      { from: ['SA2_1', 'out'], to: ['KM3_NC', 'in'], label: '106' },
+      { from: ['KM3_NC', 'out'], to: ['KM2_C', 'A1'], label: '107' },
+      { from: ['SA2_2', 'out'], to: ['KM2_NC', 'in'], label: '108' },
+      { from: ['KM2_NC', 'out'], to: ['KM3_C', 'A1'], label: '109' },
+      // 零线母线：三个线圈 A2 对齐竖向串接，经 QF2 回零线
       { from: ['KM3_C', 'A2'], to: ['KM2_C', 'A2'] },
       { from: ['KM2_C', 'A2'], to: ['KM1_C', 'A2'] },
-      { from: ['KM1_C', 'A2'], to: ['PWR', 'N'] },
-      // 主回路（示意）：相线沿指示灯左侧走廊直落
-      { from: ['PWR', 'L1'], to: ['KM1_M', 'L1'] },
-      { from: ['PWR', 'L2'], to: ['KM1_M', 'L2'] },
-      { from: ['PWR', 'L3'], to: ['KM1_M', 'L3'] },
-      { from: ['KM1_M', 'T1'], to: ['KM2_M', 'L1'] },
-      { from: ['KM1_M', 'T2'], to: ['KM2_M', 'L2'] },
-      { from: ['KM1_M', 'T3'], to: ['KM2_M', 'L3'] },
-      { from: ['KM1_M', 'T1'], to: ['KM3_M', 'L1'] },
-      { from: ['KM1_M', 'T2'], to: ['KM3_M', 'L2'] },
-      { from: ['KM1_M', 'T3'], to: ['KM3_M', 'L3'] },
-      { from: ['KM2_M', 'T1'], to: ['M', 'U'] },
-      { from: ['KM2_M', 'T2'], to: ['M', 'V'] },
-      { from: ['KM2_M', 'T3'], to: ['M', 'W'] },
-      { from: ['KM3_M', 'T1'], to: ['M', 'U'] },
-      { from: ['KM3_M', 'T2'], to: ['M', 'V'] },
-      { from: ['KM3_M', 'T3'], to: ['M', 'W'] },
+      { from: ['QF2', 'out_N'], to: ['KM2_C', 'A2'] },
+      // 主回路（示意）：QF1 出线沿左侧走廊直落
+      { from: ['QF1', 'out_L1'], to: ['KM1_M', 'L1'] },
+      { from: ['QF1', 'out_L2'], to: ['KM1_M', 'L2'] },
+      { from: ['QF1', 'out_L3'], to: ['KM1_M', 'L3'] },
+      // KM1 → T1 变压器一次侧
+      { from: ['KM1_M', 'T1'], to: ['T1', 'L1'] },
+      { from: ['KM1_M', 'T2'], to: ['T1', 'L2'] },
+      { from: ['KM1_M', 'T3'], to: ['T1', 'L3'] },
+      // 60V 抽头 → KM2 主触点（高压挡）；30V 抽头 → KM3 主触点（低压挡）；
+      // 45V 抽头备用空置（实物备用抽头同样不接线）
+      { from: ['T1', 'R1'], to: ['KM2_M', 'L1'] },
+      { from: ['T1', 'S1'], to: ['KM2_M', 'L2'] },
+      { from: ['T1', 'T1'], to: ['KM2_M', 'L3'] },
+      { from: ['T1', 'R3'], to: ['KM3_M', 'L1'] },
+      { from: ['T1', 'S3'], to: ['KM3_M', 'L2'] },
+      { from: ['T1', 'T3'], to: ['KM3_M', 'L3'] },
+      // 选挡输出汇入整流桥
+      { from: ['KM2_M', 'T1'], to: ['RECT', 'L1'] },
+      { from: ['KM2_M', 'T2'], to: ['RECT', 'L2'] },
+      { from: ['KM2_M', 'T3'], to: ['RECT', 'L3'] },
+      { from: ['KM3_M', 'T1'], to: ['RECT', 'L1'] },
+      { from: ['KM3_M', 'T2'], to: ['RECT', 'L2'] },
+      { from: ['KM3_M', 'T3'], to: ['RECT', 'L3'] },
+      // 直流侧（120mm²）：DC+ → RS1 分流器 → 电流表 → 电机；DC- 回整流桥
+      { from: ['RECT', 'DC+'], to: ['RS1', 'in'], label: '120mm²' },
+      { from: ['RS1', 'out'], to: ['PA1', 'in'] },
+      { from: ['PA1', 'out'], to: ['M', 'DC+'] },
+      { from: ['RECT', 'DC-'], to: ['M', 'DC-'], label: '120mm²' },
+      { from: ['PV1', 'in'], to: ['RECT', 'DC+'] },
+      { from: ['PV1', 'out'], to: ['RECT', 'DC-'] },
     ],
     template: {
       required: [
+        { role: 'main_breaker', type: 'breaker3' },
+        { role: 'ctrl_breaker', type: 'breaker' },
         { role: 'start_button', type: 'button_no' },
         { role: 'stop_button', type: 'button_nc' },
         { role: 'aux_no', type: 'contactor_no' },
-        { role: 'delay', type: 'switch' },
+        { role: 'timer', type: 'timer_coil' },
+        { role: 'delay', type: 'timer_no' },
         { role: 'coil', type: 'contactor_coil' },
         { role: 'sel_km2', type: 'switch' },
         { role: 'sel_km3', type: 'switch' },
@@ -446,7 +493,7 @@ export const PRACTICES: Practice[] = [
         { role: 'main', type: 'contactor_main' },
         { role: 'main_km2', type: 'contactor_main' },
         { role: 'main_km3', type: 'contactor_main' },
-        { role: 'traction_motor', type: 'motor' },
+        { role: 'traction_motor', type: 'dc_motor' },
       ],
       constraints: [
         {

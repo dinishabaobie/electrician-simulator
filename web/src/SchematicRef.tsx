@@ -324,82 +324,134 @@ function Interlock() {
   );
 }
 
-// 牵引机控制回路（简化）：启动控制（自锁+延时+风机）+ 选挡互锁 + 主回路示意
+// 断路器触点符号（水平，宽 34）：开关折线 + 触点端的 × 记号
+function QFH({ x, y, label }: { x: number; y: number; label?: string }) {
+  return (
+    <g>
+      <g stroke={LINE} strokeWidth={2} fill="none" strokeLinecap="round">
+        <line x1={x} y1={y} x2={x + 8} y2={y} />
+        <line x1={x + 8} y1={y} x2={x + 26} y2={y - 12} />
+        <line x1={x + 26} y1={y} x2={x + 34} y2={y} />
+        <line x1={x + 4} y1={y - 4} x2={x + 12} y2={y + 4} />
+        <line x1={x + 4} y1={y + 4} x2={x + 12} y2={y - 4} />
+      </g>
+      <Dot x={x} y={y} />
+      <Dot x={x + 34} y={y} />
+      {label && <T x={x + 17} y={y + 18} t={label} />}
+    </g>
+  );
+}
+
+// 牵引机控制回路（简化）：QF1/QF2 断路器 + 启动控制（自锁+延时+风机）+ 选挡互锁 + 主回路示意
 function Traction() {
   const y1 = 36;
   const yf = 78;   // 风机并联支路
   const y2 = 130;  // 选挡支路一
   const y3 = 172;  // 选挡支路二
   return (
-    <svg viewBox="0 0 340 400">
-      {/* 启动控制：SB1(∥自锁) → SB2 → KT1 → KM1 线圈 */}
-      <line x1={16} y1={y1} x2={36} y2={y1} stroke={HOT} strokeWidth={2} />
-      <NOH x={36} y={y1} push label="SB1" />
-      <line x1={70} y1={y1} x2={82} y2={y1} stroke={LINE} strokeWidth={2} />
-      <NCH x={82} y={y1} push label="SB2" />
-      <line x1={116} y1={y1} x2={128} y2={y1} stroke={LINE} strokeWidth={2} />
-      <NOH x={128} y={y1} label="KT1 延时" />
-      <line x1={162} y1={y1} x2={176} y2={y1} stroke={LINE} strokeWidth={2} />
-      <Coil x={176} y={y1} label="KM1" />
-      <line x1={232} y1={y1} x2={316} y2={y1} stroke={NEU} strokeWidth={2} />
-      <Dot x={16} y={y1} c={HOT} />
+    <svg viewBox="0 0 340 518">
+      {/* 启动控制：QF2 → SB1(∥自锁) → SB2 → KT1 → KM1 线圈 */}
+      <line x1={12} y1={y1} x2={20} y2={y1} stroke={HOT} strokeWidth={2} />
+      <QFH x={20} y={y1} label="QF2" />
+      <line x1={54} y1={y1} x2={66} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NOH x={66} y={y1} push label="SB1" />
+      <line x1={100} y1={y1} x2={112} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NCH x={112} y={y1} push label="SB2" />
+      <line x1={146} y1={y1} x2={152} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NOH x={152} y={y1} label="KT1 延时" />
+      <line x1={186} y1={y1} x2={196} y2={y1} stroke={LINE} strokeWidth={2} />
+      <Coil x={196} y={y1} label="KM1" />
+      <line x1={252} y1={y1} x2={316} y2={y1} stroke={NEU} strokeWidth={2} />
+      <Dot x={12} y={y1} c={HOT} />
       <Dot x={316} y={y1} c={NEU} />
-      <T x={16} y={y1 - 12} t="L1" c={HOT} a="start" />
+      <T x={12} y={y1 - 12} t="L1(经QF1)" c={HOT} a="start" s={9} />
       <T x={316} y={y1 - 12} t="N" c={NEU} a="end" />
       {/* 自锁：与 SB1 并联 */}
-      <line x1={36} y1={y1} x2={36} y2={y1 + 24} stroke={LINE} strokeWidth={2} />
-      <NOH x={38} y={y1 + 24} label="KM1 自锁" />
-      <line x1={72} y1={y1 + 24} x2={78} y2={y1 + 24} stroke={LINE} strokeWidth={2} />
-      <line x1={78} y1={y1 + 24} x2={78} y2={y1} stroke={LINE} strokeWidth={2} />
-      <Dot x={36} y={y1} />
-      <Dot x={78} y={y1} />
+      <line x1={66} y1={y1} x2={66} y2={y1 + 24} stroke={LINE} strokeWidth={2} />
+      <NOH x={68} y={y1 + 24} label="KM1 自锁" />
+      <line x1={102} y1={y1 + 24} x2={108} y2={y1 + 24} stroke={LINE} strokeWidth={2} />
+      <line x1={108} y1={y1 + 24} x2={108} y2={y1} stroke={LINE} strokeWidth={2} />
+      <Dot x={66} y={y1} />
+      <Dot x={108} y={y1} />
       {/* 风机 MF1/MF2 与线圈并联 */}
-      <line x1={170} y1={y1} x2={170} y2={yf} stroke={LINE} strokeWidth={2} />
-      <line x1={170} y1={yf} x2={186} y2={yf} stroke={LINE} strokeWidth={2} />
-      <circle cx={198} cy={yf} r={11} fill="#fff" stroke={LINE} strokeWidth={2} />
-      <T x={198} y={yf + 4} t="MF" c={LINE} s={9} />
-      <line x1={209} y1={yf} x2={316} y2={yf} stroke={NEU} strokeWidth={2} />
+      <line x1={192} y1={y1} x2={192} y2={yf} stroke={LINE} strokeWidth={2} />
+      <line x1={192} y1={yf} x2={206} y2={yf} stroke={LINE} strokeWidth={2} />
+      <circle cx={218} cy={yf} r={11} fill="#fff" stroke={LINE} strokeWidth={2} />
+      <T x={218} y={yf + 4} t="MF" c={LINE} s={9} />
+      <line x1={229} y1={yf} x2={316} y2={yf} stroke={NEU} strokeWidth={2} />
       <line x1={316} y1={y1} x2={316} y2={yf} stroke={NEU} strokeWidth={2} />
-      <Dot x={170} y={y1} />
-      <T x={238} y={yf - 6} t="轴流风机 ×2" s={9} />
-      {/* 选挡互锁两支路（从 L1 母线引出） */}
-      <line x1={16} y1={y1} x2={16} y2={y3} stroke={HOT} strokeWidth={2} />
+      <Dot x={192} y={y1} />
+      <T x={250} y={yf - 6} t="轴流风机 ×2" s={9} />
+      {/* 选挡互锁两支路（从 QF2 之后的母线引出） */}
+      <line x1={60} y1={y1} x2={60} y2={y3} stroke={LINE} strokeWidth={2} />
+      <Dot x={60} y={y1} />
       {[
         { y: y2, sel: 'SA2·1', nc: 'KM3', coil: 'KM2' },
         { y: y3, sel: 'SA2·2', nc: 'KM2', coil: 'KM3' },
       ].map((r) => (
         <g key={r.y}>
-          <line x1={16} y1={r.y} x2={36} y2={r.y} stroke={LINE} strokeWidth={2} />
-          <NOH x={36} y={r.y} label={r.sel} />
-          <line x1={70} y1={r.y} x2={100} y2={r.y} stroke={LINE} strokeWidth={2} />
-          <NCH x={100} y={r.y} label={`${r.nc} 互锁`} />
-          <line x1={134} y1={r.y} x2={176} y2={r.y} stroke={LINE} strokeWidth={2} />
-          <Coil x={176} y={r.y} label={r.coil} />
-          <line x1={232} y1={r.y} x2={316} y2={r.y} stroke={NEU} strokeWidth={2} />
+          <line x1={60} y1={r.y} x2={66} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <NOH x={66} y={r.y} label={r.sel} />
+          <line x1={100} y1={r.y} x2={120} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <NCH x={120} y={r.y} label={`${r.nc} 互锁`} />
+          <line x1={154} y1={r.y} x2={196} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <Coil x={196} y={r.y} label={r.coil} />
+          <line x1={252} y1={r.y} x2={316} y2={r.y} stroke={NEU} strokeWidth={2} />
         </g>
       ))}
       <line x1={316} y1={yf} x2={316} y2={y3} stroke={NEU} strokeWidth={2} />
-      {/* 主回路示意（单线图）：三相 → KM1 → KM2/KM3 → 牵引电机 */}
+      {/* 主回路示意（单线图）：三相 → QF1 → KM1 → KM2/KM3 → 牵引电机 */}
       <line x1={12} y1={212} x2={328} y2={212} stroke="#e2e8f0" strokeWidth={1} strokeDasharray="4 4" />
-      <T x={12} y={225} t="主回路（示意，单线表示三相；变压/整流略）" a="start" s={9} />
+      <T x={12} y={225} t="主回路（单线表示三相；电压真模拟）" a="start" s={9} />
       <T x={170} y={244} t="三相 380V" c={HOT} s={9} />
-      <line x1={170} y1={248} x2={170} y2={254} stroke={HOT} strokeWidth={2} />
-      <NOV x={170} y={254} />
-      <T x={182} y={272} t="KM1" a="start" s={10} />
-      <line x1={170} y1={284} x2={170} y2={292} stroke={LINE} strokeWidth={2} />
-      <line x1={130} y1={292} x2={210} y2={292} stroke={LINE} strokeWidth={2} />
-      <line x1={130} y1={292} x2={130} y2={298} stroke={LINE} strokeWidth={2} />
-      <line x1={210} y1={292} x2={210} y2={298} stroke={LINE} strokeWidth={2} />
-      <NOV x={130} y={298} />
-      <NOV x={210} y={298} />
-      <T x={118} y={316} t="KM2" a="end" s={10} />
-      <T x={222} y={316} t="KM3" a="start" s={10} />
-      <line x1={130} y1={328} x2={130} y2={336} stroke={LINE} strokeWidth={2} />
-      <line x1={210} y1={328} x2={210} y2={336} stroke={LINE} strokeWidth={2} />
-      <line x1={130} y1={336} x2={210} y2={336} stroke={LINE} strokeWidth={2} />
-      <line x1={170} y1={336} x2={170} y2={344} stroke={LINE} strokeWidth={2} />
-      <Motor cx={170} cy={361} />
-      <T x={170} y={392} t="牵引电机" s={9} />
+      <line x1={170} y1={248} x2={170} y2={256} stroke={HOT} strokeWidth={2} />
+      {/* QF1：竖向断路器（折线 + ×） */}
+      <g stroke={LINE} strokeWidth={2} fill="none" strokeLinecap="round">
+        <line x1={170} y1={256} x2={170} y2={262} />
+        <line x1={170} y1={262} x2={182} y2={278} />
+        <line x1={170} y1={278} x2={170} y2={284} />
+        <line x1={166} y1={266} x2={174} y2={274} />
+        <line x1={166} y1={274} x2={174} y2={266} />
+      </g>
+      <T x={186} y={274} t="QF1" a="start" s={10} />
+      <line x1={170} y1={284} x2={170} y2={290} stroke={LINE} strokeWidth={2} />
+      <NOV x={170} y={290} />
+      <T x={182} y={308} t="KM1" a="start" s={10} />
+      {/* T1 变压器（摆设）：双圆圈符号 */}
+      <line x1={170} y1={320} x2={170} y2={326} stroke={LINE} strokeWidth={2} />
+      <circle cx={170} cy={336} r={9} fill="none" stroke={LINE} strokeWidth={2} />
+      <circle cx={170} cy={349} r={9} fill="none" stroke={LINE} strokeWidth={2} />
+      <T x={186} y={346} t="T1 60/45/30V" a="start" s={9} />
+      <line x1={170} y1={358} x2={170} y2={366} stroke={LINE} strokeWidth={2} />
+      <line x1={130} y1={366} x2={210} y2={366} stroke={LINE} strokeWidth={2} />
+      <line x1={130} y1={366} x2={130} y2={372} stroke={LINE} strokeWidth={2} />
+      <line x1={210} y1={366} x2={210} y2={372} stroke={LINE} strokeWidth={2} />
+      <NOV x={130} y={372} />
+      <NOV x={210} y={372} />
+      <T x={118} y={390} t="KM2" a="end" s={10} />
+      <T x={222} y={390} t="KM3" a="start" s={10} />
+      <line x1={130} y1={402} x2={130} y2={410} stroke={LINE} strokeWidth={2} />
+      <line x1={210} y1={402} x2={210} y2={410} stroke={LINE} strokeWidth={2} />
+      <line x1={130} y1={410} x2={210} y2={410} stroke={LINE} strokeWidth={2} />
+      {/* 整流桥（摆设）：二极管符号 */}
+      <line x1={170} y1={410} x2={170} y2={416} stroke={LINE} strokeWidth={2} />
+      <g stroke={LINE} strokeWidth={1.6} fill="none">
+        <path d="M164,418 L176,418 L170,428 Z" fill="#334155" stroke="none" />
+        <line x1={164} y1={428} x2={176} y2={428} />
+      </g>
+      <T x={182} y={426} t="整流 V1~V6" a="start" s={9} />
+      <line x1={170} y1={428} x2={170} y2={438} stroke={LINE} strokeWidth={2} />
+      {/* 电流表 PA1 串联、电压表 PV1 跨接（摆设） */}
+      <circle cx={170} cy={448} r={9} fill="#fff" stroke={LINE} strokeWidth={1.8} />
+      <T x={170} y={452} t="A" c={LINE} s={10} />
+      <T x={156} y={452} t="PA1" a="end" s={8} />
+      <circle cx={228} cy={448} r={9} fill="#fff" stroke={LINE} strokeWidth={1.8} />
+      <T x={228} y={452} t="V" c={LINE} s={10} />
+      <T x={242} y={452} t="PV1" a="start" s={8} />
+      <line x1={179} y1={448} x2={219} y2={448} stroke={LINE} strokeWidth={1} strokeDasharray="3 3" />
+      <line x1={170} y1={457} x2={170} y2={464} stroke={LINE} strokeWidth={2} />
+      <Motor cx={170} cy={481} />
+      <T x={170} y={512} t="牵引电机" s={9} />
     </svg>
   );
 }
