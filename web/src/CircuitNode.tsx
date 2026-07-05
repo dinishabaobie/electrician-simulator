@@ -13,6 +13,28 @@ function displayName(d: any): string {
     case 'aux_no': return '辅助常开触点';
     case 'main': return '主触点';
     case 'motor': return '电机';
+    case 'overload_main': case 'overload_main_m1': case 'overload_main_m2':
+      return '热继热元件';
+    case 'overload_nc': case 'overload_nc_m1': case 'overload_nc_m2':
+      return '热继常闭触点';
+    case 'stop_m1': return '总停按钮';
+    case 'stop_m2': return 'M2 停止按钮';
+    case 'start_m1': return '启动按钮 M1';
+    case 'start_m2': return '启动按钮 M2';
+    case 'coil_m1': case 'coil_m2': return '接触器线圈';
+    case 'self_lock_m1': case 'self_lock_m2': return '自锁触点';
+    case 'seq_no': return '顺序联锁触点';
+    case 'main_m1': case 'main_m2': return '主触点';
+    case 'motor_m1': return '电机 M1';
+    case 'motor_m2': return '电机 M2';
+    case 'delay': return 'KT1 延时触点';
+    case 'sel_km2': return '选挡开关(KM2 挡)';
+    case 'sel_km3': return '选挡开关(KM3 挡)';
+    case 'nc_of_km2': return 'KM2 常闭·互锁';
+    case 'nc_of_km3': return 'KM3 常闭·互锁';
+    case 'coil_km2': case 'coil_km3': return '接触器线圈';
+    case 'main_km2': case 'main_km3': return '主触点';
+    case 'traction_motor': return '牵引电机(示意)';
   }
   return DEFS[d.type]?.label ?? d.type;
 }
@@ -37,11 +59,17 @@ function statusText(d: any): string {
       return sim.energized ? '得电' : '失电';
     case 'contactor_main':
     case 'contactor_no':
+    case 'contactor_nc':
       return sim.closed ? '闭合' : '断开';
     case 'lamp':
+    case 'indicator':
       return sim.working ? '亮' : '灭';
     case 'motor':
+    case 'fan':
       return sim.working ? '运行' : '停止';
+    case 'thermal_main':
+    case 'thermal_nc':
+      return d.state?.tripped ? '已动作' : '正常';
     default:
       return '';
   }
@@ -69,7 +97,9 @@ export function CircuitNode({ id, data }: NodeProps) {
     interactive.onPointerUp = () => press(id, false);
     interactive.onPointerLeave = () => press(id, false);
   }
-  const title = def?.toggle ? '点击切换 合/断 · 按住拖动可移动'
+  const isThermal = d.type === 'thermal_main' || d.type === 'thermal_nc';
+  const title = isThermal ? '点击模拟过载动作 / 复位 · 按住拖动可移动'
+    : def?.toggle ? '点击切换 合/断 · 按住拖动可移动'
     : def?.momentary ? '按住生效 · 按住拖动可移动' : '';
 
   return (

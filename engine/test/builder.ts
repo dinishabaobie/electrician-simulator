@@ -41,6 +41,10 @@ export const C = {
   thermalNC: (id: string, tripped = false): Component => ({
     id, type: 'thermal_nc', terminals: term('in', 'out'), state: { tripped },
   }),
+  thermalMain: (id: string, tripped = false): Component => ({
+    id, type: 'thermal_main',
+    terminals: term('L1', 'T1', 'L2', 'T2', 'L3', 'T3'), state: { tripped },
+  }),
 };
 
 let wireSeq = 0;

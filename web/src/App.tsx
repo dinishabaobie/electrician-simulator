@@ -131,12 +131,12 @@ function buildCircuit(nodes: Node[], edges: Edge[]): Circuit {
     const def = DEFS[d.type];
     return {
       id: n.id,
-      type: d.type,
+      type: def.type, // 外观键（如 fan）映射到引擎类型（motor）
       groupId: d.groupId,
       role: d.role,
       terminals: def.terminals.map((t) => ({ id: t.id })),
       state: { ...d.state },
-      rules: def.isLoad ? { isLoad: true } : undefined,
+      rules: (def.rules as any) ?? (def.isLoad ? { isLoad: true } : undefined),
     };
   });
   const wires = edges.map((e) => ({
@@ -159,6 +159,9 @@ export default function App() {
   // 悬停描线：聚焦某根线或某个元件相连的线，其余变淡，便于在密集接线里分辨
   const [hoverEdgeId, setHoverEdgeId] = useState<string | null>(null);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
+  // 侧栏折叠：收起左侧操作栏 / 右侧状态栏，给画布让出全部宽度
+  const [showLeft, setShowLeft] = useState(true);
+  const [showRight, setShowRight] = useState(true);
 
   // 撤回历史：只记录结构性编辑（接线 / 删除 / 拖动），不记录开关按钮等运行操作
   const past = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -237,11 +240,24 @@ export default function App() {
   }
 
   function toggle(id: string) {
-    const next = nodes.map((n) =>
-      n.id === id
-        ? { ...n, data: { ...n.data, state: { ...(n.data as any).state, closed: !(n.data as any).state.closed } } }
-        : n,
-    );
+    const src = nodes.find((n) => n.id === id)?.data as any;
+    if (!src) return;
+    // 热继：点击 = 模拟过载动作/复位。热元件与常闭触点是同一个热继电器
+    // （共享 groupId），动作/复位必须联动（规约 §4）。
+    const isThermal = src.type === 'thermal_main' || src.type === 'thermal_nc';
+    const next = nodes.map((n) => {
+      const d = n.data as any;
+      if (isThermal) {
+        const linked =
+          n.id === id ||
+          ((d.type === 'thermal_main' || d.type === 'thermal_nc') &&
+            !!src.groupId && d.groupId === src.groupId);
+        if (!linked) return n;
+        return { ...n, data: { ...d, state: { ...d.state, tripped: !src.state.tripped } } };
+      }
+      if (n.id !== id) return n;
+      return { ...n, data: { ...d, state: { ...d.state, closed: !d.state.closed } } };
+    });
     recompute(next, edges);
   }
 
@@ -354,6 +370,7 @@ export default function App() {
   return (
     <CircuitCtx.Provider value={actions}>
       <div className="app">
+        {showLeft && (
         <aside className="palette">
           <h1>电工模拟器</h1>
           <div className="palette-group">
@@ -378,6 +395,7 @@ export default function App() {
           </div>
           <div className="tips">
             接线：从端子（小圆点）拖到另一个端子，端子不分方向。走线自动绕开元件、平行线自动分道；实心圆点表示多线相连。<br />
+            画布：双指滑动平移，双指捏合缩放，空白处拖动也可平移。<br />
             开关：点击切换合/断。<br />
             按钮：按住生效，松开复位。<br />
             删线：选中线后按 Delete 键。
@@ -390,8 +408,23 @@ export default function App() {
             </div>
           </div>
         </aside>
+        )}
 
         <main className="canvas">
+          <button
+            className="side-toggle left"
+            onClick={() => setShowLeft((v) => !v)}
+            title={showLeft ? '收起左侧栏' : '展开左侧栏'}
+          >
+            {showLeft ? '◀' : '▶'}
+          </button>
+          <button
+            className="side-toggle right"
+            onClick={() => setShowRight((v) => !v)}
+            title={showRight ? '收起右侧栏' : '展开右侧栏'}
+          >
+            {showRight ? '▶' : '◀'}
+          </button>
           <ReactFlow
             nodes={nodes}
             edges={displayEdges}
@@ -410,6 +443,9 @@ export default function App() {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             nodeDragThreshold={5}
+            panOnScroll
+            zoomOnScroll={false}
+            zoomOnPinch
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
             defaultEdgeOptions={{ type: 'routed', style: { strokeWidth: 2 } }}
@@ -441,6 +477,7 @@ export default function App() {
           <SchematicRef practiceKey={practice.key} />
         </main>
 
+        {showRight && (
         <aside className="panel">
           <h2>运行状态</h2>
           {!result && <p className="muted">尚未运行。接好线后点「运行模拟」。</p>}
@@ -485,6 +522,7 @@ export default function App() {
             </>
           )}
         </aside>
+        )}
       </div>
     </CircuitCtx.Provider>
   );

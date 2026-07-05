@@ -9,13 +9,14 @@ export interface TermDef {
 }
 
 export interface CompDef {
-  type: ComponentType;
+  type: ComponentType;   // 引擎元件类型（DEFS 的键是外观键，可与它不同，如 fan → motor）
   label: string;
   w: number;
   h: number;
   isLoad?: boolean;
   toggle?: boolean;      // 点击切换（开关）
   momentary?: boolean;   // 按住生效（按钮）
+  rules?: Record<string, unknown>; // 传给引擎的 rules（如简化电机 motorMode）
   terminals: TermDef[];
 }
 
@@ -63,6 +64,31 @@ export const DEFS: Record<string, CompDef> = {
     type: 'contactor_no', label: '辅助常开', w: 88, h: 60,
     terminals: [{ id: 'in', ...L('70%') }, { id: 'out', ...R('70%') }],
   },
+  contactor_nc: {
+    type: 'contactor_nc', label: '辅助常闭', w: 88, h: 60,
+    terminals: [{ id: 'in', ...L('70%') }, { id: 'out', ...R('70%') }],
+  },
+  indicator: {
+    type: 'indicator', label: '指示灯', w: 64, h: 78, isLoad: true,
+    terminals: [{ id: 'L', ...B('35%') }, { id: 'N', ...B('65%') }],
+  },
+  // 轴流风机：引擎里是「简化电机」（单相负载，U/V 两端），外观独立
+  fan: {
+    type: 'motor', label: '轴流风机', w: 90, h: 84, isLoad: true,
+    rules: { isLoad: true, motorMode: 'simplified' },
+    terminals: [{ id: 'U', ...B('35%') }, { id: 'V', ...B('65%') }],
+  },
+  thermal_main: {
+    type: 'thermal_main', label: '热继·热元件', w: 134, h: 84, toggle: true,
+    terminals: [
+      { id: 'L1', ...T('25%') }, { id: 'L2', ...T('50%') }, { id: 'L3', ...T('75%') },
+      { id: 'T1', ...B('25%') }, { id: 'T2', ...B('50%') }, { id: 'T3', ...B('75%') },
+    ],
+  },
+  thermal_nc: {
+    type: 'thermal_nc', label: '热继·常闭', w: 88, h: 60, toggle: true,
+    terminals: [{ id: 'in', ...L('70%') }, { id: 'out', ...R('70%') }],
+  },
   lamp: {
     type: 'lamp', label: '灯泡', w: 74, h: 88, isLoad: true,
     terminals: [{ id: 'L', ...B('34%') }, { id: 'N', ...B('66%') }],
@@ -77,5 +103,6 @@ export function defaultState(type: string): Record<string, unknown> {
   if (type === 'single_phase_power' || type === 'three_phase_power') return { on: true };
   if (type === 'switch') return { closed: false };
   if (type === 'button_no' || type === 'button_nc') return { pressed: false };
+  if (type === 'thermal_main' || type === 'thermal_nc') return { tripped: false };
   return {};
 }

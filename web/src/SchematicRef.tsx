@@ -110,14 +110,18 @@ function NOV({ x, y }: { x: number; y: number }) {
   );
 }
 
-// 三相主电路：三相 → KM 主触点（3 NO 联动）→ 电机
-function MainCircuit({ y0 }: { y0: number }) {
-  const xs = [96, 132, 168];
+// 三相主电路：三相 → KM 主触点（3 NO 联动）→ [FR 热元件] → 电机
+// dx 横向平移；km/motorName 用于一张图里画多路主回路时的紧凑位号
+function MainCircuit({ y0, overload, dx = 0, km, motorName }:
+  { y0: number; overload?: boolean; dx?: number; km?: string; motorName?: string }) {
+  const xs = [96, 132, 168].map((x) => x + dx);
   const top = y0;
   const cTop = y0 + 16;
   const cBot = cTop + 30;
-  const motorTop = cBot + 8;
-  const mcx = 132;
+  const frTop = cBot + 6;
+  const frBot = overload ? frTop + 16 : cBot;
+  const motorTop = frBot + 8;
+  const mcx = xs[1];
   const mcy = motorTop + 20;
   return (
     <g>
@@ -126,7 +130,13 @@ function MainCircuit({ y0 }: { y0: number }) {
           <Dot x={x} y={top} c={HOT} />
           <line x1={x} y1={top} x2={x} y2={cTop} stroke={HOT} strokeWidth={2} />
           <NOV x={x} y={cTop} />
-          <line x1={x} y1={cBot} x2={x} y2={motorTop} stroke={LINE} strokeWidth={2} />
+          {overload && (
+            <g stroke={LINE} strokeWidth={2} fill="#fff">
+              <line x1={x} y1={cBot} x2={x} y2={frTop} />
+              <rect x={x - 5} y={frTop} width={10} height={16} />
+            </g>
+          )}
+          <line x1={x} y1={frBot} x2={x} y2={motorTop} stroke={LINE} strokeWidth={2} />
           <line x1={x} y1={motorTop} x2={mcx} y2={mcy - 16} stroke={LINE} strokeWidth={2} />
         </g>
       ))}
@@ -136,9 +146,79 @@ function MainCircuit({ y0 }: { y0: number }) {
       {/* 联动虚线（同一接触器） */}
       <line x1={xs[0] + 6} y1={cTop + 18} x2={xs[2] + 6} y2={cTop + 18}
         stroke={LINE} strokeWidth={1.5} strokeDasharray="3 3" />
-      <T x={xs[2] + 34} y={cTop + 4} t="KM 主触点" a="start" />
+      {km
+        ? <T x={xs[0] - 12} y={cTop + 16} t={km} a="end" />
+        : <T x={xs[2] + 34} y={cTop + 4} t="KM 主触点" a="start" />}
+      {overload && (km
+        ? <T x={xs[0] - 12} y={frTop + 13} t={km.replace('KM', 'FR')} a="end" />
+        : <T x={xs[2] + 34} y={frTop + 13} t="FR 热元件" a="start" />)}
       <Motor cx={mcx} cy={mcy} />
+      {motorName && <T x={mcx} y={mcy + 31} t={motorName} />}
     </g>
+  );
+}
+
+// 两台电动机顺序启动（教材接法）：L → FR1常闭 → FR2常闭 → 节点③分两支；
+// M1 支：SB12停 → SB11启（自锁）→ KM1；
+// M2 支：SB22停 → SB21启（自锁）→ KM1顺序常开 → KM2。
+// SB12 停 KM1 后顺序触点断开，KM2 级联跟停；SB22 只停 M2。
+function SeqStart() {
+  const y1 = 40;
+  const y2 = 124;
+  return (
+    <svg viewBox="0 0 340 352">
+      {/* 控制总线 + M1 支路 */}
+      <line x1={16} y1={y1} x2={30} y2={y1} stroke={HOT} strokeWidth={2} />
+      <NCH x={30} y={y1} label="FR1" />
+      <line x1={64} y1={y1} x2={78} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NCH x={78} y={y1} label="FR2" />
+      <line x1={112} y1={y1} x2={130} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NCH x={130} y={y1} push label="SB12" />
+      <line x1={164} y1={y1} x2={176} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NOH x={176} y={y1} push label="SB11" />
+      <line x1={210} y1={y1} x2={220} y2={y1} stroke={LINE} strokeWidth={2} />
+      <Coil x={220} y={y1} label="KM1" />
+      <line x1={276} y1={y1} x2={324} y2={y1} stroke={NEU} strokeWidth={2} />
+      <Dot x={16} y={y1} c={HOT} />
+      <Dot x={324} y={y1} c={NEU} />
+      <T x={16} y={y1 - 12} t="L1" c={HOT} a="start" />
+      <T x={324} y={y1 - 12} t="N" c={NEU} a="end" />
+
+      {/* M1 自锁：与 SB11 并联 */}
+      <line x1={172} y1={y1} x2={172} y2={y1 + 26} stroke={LINE} strokeWidth={2} />
+      <NOH x={174} y={y1 + 26} label="KM1 自锁" />
+      <line x1={208} y1={y1 + 26} x2={214} y2={y1 + 26} stroke={LINE} strokeWidth={2} />
+      <line x1={214} y1={y1 + 26} x2={214} y2={y1} stroke={LINE} strokeWidth={2} />
+      <Dot x={172} y={y1} />
+      <Dot x={214} y={y1} />
+
+      {/* M2 支路：从节点③（FR2 之后、SB12 之前）引出 */}
+      <line x1={124} y1={y1} x2={124} y2={y2} stroke={LINE} strokeWidth={2} />
+      <NCH x={126} y={y2} push label="SB22" />
+      <line x1={160} y1={y2} x2={174} y2={y2} stroke={LINE} strokeWidth={2} />
+      <NOH x={174} y={y2} push label="SB21" />
+      <line x1={208} y1={y2} x2={218} y2={y2} stroke={LINE} strokeWidth={2} />
+      <NOH x={218} y={y2} label="KM1 顺序" />
+      <line x1={252} y1={y2} x2={258} y2={y2} stroke={LINE} strokeWidth={2} />
+      <Coil x={258} y={y2} label="KM2" />
+      <line x1={314} y1={y2} x2={324} y2={y2} stroke={NEU} strokeWidth={2} />
+      <line x1={324} y1={y1} x2={324} y2={y2} stroke={NEU} strokeWidth={2} />
+      <Dot x={124} y={y1} />
+
+      {/* M2 自锁：与 SB21 并联 */}
+      <line x1={168} y1={y2} x2={168} y2={y2 + 26} stroke={LINE} strokeWidth={2} />
+      <NOH x={170} y={y2 + 26} label="KM2 自锁" />
+      <line x1={204} y1={y2 + 26} x2={212} y2={y2 + 26} stroke={LINE} strokeWidth={2} />
+      <line x1={212} y1={y2 + 26} x2={212} y2={y2} stroke={LINE} strokeWidth={2} />
+      <Dot x={168} y={y2} />
+      <Dot x={212} y={y2} />
+
+      {/* 分隔 + 两路主回路（各带 FR 热元件） */}
+      <line x1={12} y1={192} x2={328} y2={192} stroke="#e2e8f0" strokeWidth={1} strokeDasharray="4 4" />
+      <T x={12} y={205} t="控制回路 220V" a="start" s={10} />
+      <MainCircuit y0={218} dx={-50} km="KM1" motorName="M1" overload />
+      <MainCircuit y0={218} dx={104} km="KM2" motorName="M2" overload />
+    </svg>
   );
 }
 
@@ -162,14 +242,15 @@ function SingleLight() {
   );
 }
 
-// 控制回路（点动 / 自锁共用骨架）。selfLock=true 时加并联自锁触点。
-function ControlMotor({ selfLock }: { selfLock?: boolean }) {
+// 控制回路（点动 / 自锁共用骨架）。selfLock=true 加并联自锁触点；
+// overload=true 加热继：控制回路串 FR 常闭，主回路串 FR 热元件。
+function ControlMotor({ selfLock, overload }: { selfLock?: boolean; overload?: boolean }) {
   const y = 40;
   // 节点：A = 停止后 / 启动前；B = 启动后 / 线圈前
   const ax = 90;
   const bx = 134;
   return (
-    <svg viewBox="0 0 300 250">
+    <svg viewBox={`0 0 300 ${overload ? 262 : 250}`}>
       {/* 控制回路 220V */}
       <line x1={16} y1={y} x2={44} y2={y} stroke={HOT} strokeWidth={2} />
       <NCH x={44} y={y} push label="停止" />
@@ -177,7 +258,15 @@ function ControlMotor({ selfLock }: { selfLock?: boolean }) {
       <NOH x={ax + 2} y={y} push label="启动" />
       <line x1={ax + 36} y1={y} x2={bx} y2={y} stroke={LINE} strokeWidth={2} />
       <Coil x={bx + 4} y={y} />
-      <line x1={bx + 60} y1={y} x2={284} y2={y} stroke={NEU} strokeWidth={2} />
+      {overload ? (
+        <g>
+          <line x1={bx + 60} y1={y} x2={bx + 72} y2={y} stroke={LINE} strokeWidth={2} />
+          <NCH x={bx + 72} y={y} label="FR" />
+          <line x1={bx + 106} y1={y} x2={284} y2={y} stroke={NEU} strokeWidth={2} />
+        </g>
+      ) : (
+        <line x1={bx + 60} y1={y} x2={284} y2={y} stroke={NEU} strokeWidth={2} />
+      )}
       <Dot x={16} y={y} c={HOT} />
       <Dot x={284} y={y} c={NEU} />
       <T x={16} y={y - 12} t="L1" c={HOT} a="start" />
@@ -200,7 +289,117 @@ function ControlMotor({ selfLock }: { selfLock?: boolean }) {
       <T x={12} y={selfLock ? 110 : 98} t="控制回路 220V" a="start" s={10} />
 
       {/* 主回路 380V */}
-      <MainCircuit y0={selfLock ? 128 : 116} />
+      <MainCircuit y0={selfLock ? 128 : 116} overload={overload} />
+    </svg>
+  );
+}
+
+// 接触器互锁：两条支路各串对方常闭
+function Interlock() {
+  const y1 = 40;
+  const y2 = 104;
+  return (
+    <svg viewBox="0 0 300 150">
+      {[
+        { y: y1, sel: 'SA2·1', nc: 'KM3 常闭', coil: 'KM2' },
+        { y: y2, sel: 'SA2·2', nc: 'KM2 常闭', coil: 'KM3' },
+      ].map((r) => (
+        <g key={r.y}>
+          <line x1={16} y1={r.y} x2={40} y2={r.y} stroke={HOT} strokeWidth={2} />
+          <NOH x={40} y={r.y} label={r.sel} />
+          <line x1={74} y1={r.y} x2={110} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <NCH x={110} y={r.y} label={r.nc} />
+          <line x1={144} y1={r.y} x2={170} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <Coil x={170} y={r.y} label={r.coil} />
+          <line x1={226} y1={r.y} x2={284} y2={r.y} stroke={NEU} strokeWidth={2} />
+        </g>
+      ))}
+      <line x1={16} y1={y1} x2={16} y2={y2} stroke={HOT} strokeWidth={2} />
+      <line x1={284} y1={y1} x2={284} y2={y2} stroke={NEU} strokeWidth={2} />
+      <Dot x={16} y={y1} c={HOT} />
+      <Dot x={284} y={y1} c={NEU} />
+      <T x={16} y={y1 - 12} t="L" c={HOT} a="start" />
+      <T x={284} y={y1 - 12} t="N" c={NEU} a="end" />
+    </svg>
+  );
+}
+
+// 牵引机控制回路（简化）：启动控制（自锁+延时+风机）+ 选挡互锁 + 主回路示意
+function Traction() {
+  const y1 = 36;
+  const yf = 78;   // 风机并联支路
+  const y2 = 130;  // 选挡支路一
+  const y3 = 172;  // 选挡支路二
+  return (
+    <svg viewBox="0 0 340 400">
+      {/* 启动控制：SB1(∥自锁) → SB2 → KT1 → KM1 线圈 */}
+      <line x1={16} y1={y1} x2={36} y2={y1} stroke={HOT} strokeWidth={2} />
+      <NOH x={36} y={y1} push label="SB1" />
+      <line x1={70} y1={y1} x2={82} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NCH x={82} y={y1} push label="SB2" />
+      <line x1={116} y1={y1} x2={128} y2={y1} stroke={LINE} strokeWidth={2} />
+      <NOH x={128} y={y1} label="KT1 延时" />
+      <line x1={162} y1={y1} x2={176} y2={y1} stroke={LINE} strokeWidth={2} />
+      <Coil x={176} y={y1} label="KM1" />
+      <line x1={232} y1={y1} x2={316} y2={y1} stroke={NEU} strokeWidth={2} />
+      <Dot x={16} y={y1} c={HOT} />
+      <Dot x={316} y={y1} c={NEU} />
+      <T x={16} y={y1 - 12} t="L1" c={HOT} a="start" />
+      <T x={316} y={y1 - 12} t="N" c={NEU} a="end" />
+      {/* 自锁：与 SB1 并联 */}
+      <line x1={36} y1={y1} x2={36} y2={y1 + 24} stroke={LINE} strokeWidth={2} />
+      <NOH x={38} y={y1 + 24} label="KM1 自锁" />
+      <line x1={72} y1={y1 + 24} x2={78} y2={y1 + 24} stroke={LINE} strokeWidth={2} />
+      <line x1={78} y1={y1 + 24} x2={78} y2={y1} stroke={LINE} strokeWidth={2} />
+      <Dot x={36} y={y1} />
+      <Dot x={78} y={y1} />
+      {/* 风机 MF1/MF2 与线圈并联 */}
+      <line x1={170} y1={y1} x2={170} y2={yf} stroke={LINE} strokeWidth={2} />
+      <line x1={170} y1={yf} x2={186} y2={yf} stroke={LINE} strokeWidth={2} />
+      <circle cx={198} cy={yf} r={11} fill="#fff" stroke={LINE} strokeWidth={2} />
+      <T x={198} y={yf + 4} t="MF" c={LINE} s={9} />
+      <line x1={209} y1={yf} x2={316} y2={yf} stroke={NEU} strokeWidth={2} />
+      <line x1={316} y1={y1} x2={316} y2={yf} stroke={NEU} strokeWidth={2} />
+      <Dot x={170} y={y1} />
+      <T x={238} y={yf - 6} t="轴流风机 ×2" s={9} />
+      {/* 选挡互锁两支路（从 L1 母线引出） */}
+      <line x1={16} y1={y1} x2={16} y2={y3} stroke={HOT} strokeWidth={2} />
+      {[
+        { y: y2, sel: 'SA2·1', nc: 'KM3', coil: 'KM2' },
+        { y: y3, sel: 'SA2·2', nc: 'KM2', coil: 'KM3' },
+      ].map((r) => (
+        <g key={r.y}>
+          <line x1={16} y1={r.y} x2={36} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <NOH x={36} y={r.y} label={r.sel} />
+          <line x1={70} y1={r.y} x2={100} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <NCH x={100} y={r.y} label={`${r.nc} 互锁`} />
+          <line x1={134} y1={r.y} x2={176} y2={r.y} stroke={LINE} strokeWidth={2} />
+          <Coil x={176} y={r.y} label={r.coil} />
+          <line x1={232} y1={r.y} x2={316} y2={r.y} stroke={NEU} strokeWidth={2} />
+        </g>
+      ))}
+      <line x1={316} y1={yf} x2={316} y2={y3} stroke={NEU} strokeWidth={2} />
+      {/* 主回路示意（单线图）：三相 → KM1 → KM2/KM3 → 牵引电机 */}
+      <line x1={12} y1={212} x2={328} y2={212} stroke="#e2e8f0" strokeWidth={1} strokeDasharray="4 4" />
+      <T x={12} y={225} t="主回路（示意，单线表示三相；变压/整流略）" a="start" s={9} />
+      <T x={170} y={244} t="三相 380V" c={HOT} s={9} />
+      <line x1={170} y1={248} x2={170} y2={254} stroke={HOT} strokeWidth={2} />
+      <NOV x={170} y={254} />
+      <T x={182} y={272} t="KM1" a="start" s={10} />
+      <line x1={170} y1={284} x2={170} y2={292} stroke={LINE} strokeWidth={2} />
+      <line x1={130} y1={292} x2={210} y2={292} stroke={LINE} strokeWidth={2} />
+      <line x1={130} y1={292} x2={130} y2={298} stroke={LINE} strokeWidth={2} />
+      <line x1={210} y1={292} x2={210} y2={298} stroke={LINE} strokeWidth={2} />
+      <NOV x={130} y={298} />
+      <NOV x={210} y={298} />
+      <T x={118} y={316} t="KM2" a="end" s={10} />
+      <T x={222} y={316} t="KM3" a="start" s={10} />
+      <line x1={130} y1={328} x2={130} y2={336} stroke={LINE} strokeWidth={2} />
+      <line x1={210} y1={328} x2={210} y2={336} stroke={LINE} strokeWidth={2} />
+      <line x1={130} y1={336} x2={210} y2={336} stroke={LINE} strokeWidth={2} />
+      <line x1={170} y1={336} x2={170} y2={344} stroke={LINE} strokeWidth={2} />
+      <Motor cx={170} cy={361} />
+      <T x={170} y={392} t="牵引电机" s={9} />
     </svg>
   );
 }
@@ -209,6 +408,10 @@ const DIAGRAMS: Record<string, { title: string; el: JSX.Element }> = {
   single_light: { title: '单灯单控 · 原理图', el: <SingleLight /> },
   point_control: { title: '接触器点动 · 原理图', el: <ControlMotor /> },
   self_lock: { title: '接触器自锁 · 原理图', el: <ControlMotor selfLock /> },
+  self_lock_overload: { title: '自锁 + 热保护 · 原理图', el: <ControlMotor selfLock overload /> },
+  seq_start: { title: '两台电机顺序启动 · 原理图', el: <SeqStart /> },
+  interlock: { title: '接触器互锁 · 原理图', el: <Interlock /> },
+  traction: { title: '牵引机控制回路 · 原理图', el: <Traction /> },
 };
 
 export function SchematicRef({ practiceKey }: { practiceKey: string }) {

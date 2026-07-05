@@ -63,9 +63,8 @@ interface Edge {
   a: NodeId;
   b: NodeId;
   isLoad: boolean;
+  owner: string; // 产生这条边的元件 id（§5.2 判负载工作时要剔除自身的边）
 }
-
-const edge = (a: NodeId, b: NodeId, isLoad: boolean): Edge => ({ a, b, isLoad });
 
 // bestCase=true：把所有可操作元件（开关/按钮/触点）都视为导通，用于结构性
 // 断路检查——「无论怎么操作都成不了回路」才算接线错误。真实故障态
@@ -77,6 +76,8 @@ function componentEdges(
   bestCase = false,
 ): Edge[] {
   const n = (t: string) => nodeOf(dsu, comp.id, t);
+  const edge = (a: NodeId, b: NodeId, isLoad: boolean): Edge =>
+    ({ a, b, isLoad, owner: comp.id });
   const coilOn = comp.groupId ? !!coilEnergized.get(comp.groupId) : false;
 
   switch (comp.type) {
@@ -93,7 +94,14 @@ function componentEdges(
     case 'fuse':
       return !comp.state.blown ? [edge(n('in'), n('out'), false)] : [];
     case 'thermal_main':
-      return !comp.state.tripped ? [edge(n('in'), n('out'), false)] : [];
+      // 三相热元件（与主触点同为三对端子）：正常导通，过载动作后三相一起断开
+      return !comp.state.tripped
+        ? [
+            edge(n('L1'), n('T1'), false),
+            edge(n('L2'), n('T2'), false),
+            edge(n('L3'), n('T3'), false),
+          ]
+        : [];
     case 'thermal_nc':
       return !comp.state.tripped ? [edge(n('in'), n('out'), false)] : [];
     case 'contactor_no':
@@ -167,19 +175,26 @@ function adjacency(edges: Edge[], includeLoad: boolean): Adj {
   return adj;
 }
 
-function bfs(starts: NodeId[], adj: Adj): Set<NodeId> {
+// stop：吸收节点集合——遍历遇到即截断，既不进入结果集也不向外扩散。
+// 用于电位钳制：零线排等极节点的电位被电源钳住，火线经负载到达零线排后，
+// 那里已是“另一种电位”，不能算火线可达、更不能再倒灌出去（起点不受限）。
+function bfs(starts: NodeId[], adj: Adj, stop?: Set<NodeId>): Set<NodeId> {
   const seen = new Set<NodeId>(starts);
   const q = [...starts];
   while (q.length) {
     const x = q.shift() as NodeId;
     for (const y of adj.get(x) ?? []) {
-      if (!seen.has(y)) {
-        seen.add(y);
-        q.push(y);
-      }
+      if (seen.has(y) || stop?.has(y)) continue;
+      seen.add(y);
+      q.push(y);
     }
   }
   return seen;
+}
+
+// 电源极吸收集：所有“电位不属于 allowed”的极节点
+function poleStops(ps: Pole[], allowed: (pot: string) => boolean): Set<NodeId> {
+  return new Set(ps.filter((p) => !allowed(p.potential)).map((p) => p.node));
 }
 
 function connected(a: NodeId, b: NodeId, adj: Adj): boolean {
@@ -207,17 +222,23 @@ function step(c: Circuit, dsu: DSU, coil: Map<string, boolean>): Step {
 
   const hotNodes = ps.filter((p) => p.potential !== 'N').map((p) => p.node);
   const nNodes = ps.filter((p) => p.potential === 'N').map((p) => p.node);
-  const reachHot = bfs(hotNodes, adjAll);
-  const reachN = bfs(nNodes, adjAll);
+  const stopAtN = poleStops(ps, (pot) => pot !== 'N');
+  const stopAtHot = poleStops(ps, (pot) => pot === 'N');
+  const reachHot = bfs(hotNodes, adjAll, stopAtN);
+  const reachN = bfs(nNodes, adjAll, stopAtHot);
 
-  // §5.2 重新判定各线圈是否得电
+  // §5.2 重新判定各线圈是否得电。可达路径允许穿过其它负载（串联负载都算
+  // 工作），但必须剔除该线圈自身的边——否则火线经别的负载到达零线排后，
+  // 会倒穿线圈自己的边“够到”A1，多个线圈共零线时全部误判得电。
   const newCoil = new Map<string, boolean>();
   for (const comp of c.components) {
     if (comp.type === 'contactor_coil' && comp.groupId) {
       const a = nodeOf(dsu, comp.id, 'A1');
       const b = nodeOf(dsu, comp.id, 'A2');
-      const on =
-        (reachHot.has(a) && reachN.has(b)) || (reachHot.has(b) && reachN.has(a));
+      const adj = adjacency(edges.filter((e) => e.owner !== comp.id), true);
+      const rh = bfs(hotNodes, adj, stopAtN);
+      const rn = bfs(nNodes, adj, stopAtHot);
+      const on = (rh.has(a) && rn.has(b)) || (rh.has(b) && rn.has(a));
       newCoil.set(comp.groupId, on);
     }
   }
@@ -295,22 +316,34 @@ function buildResult(
   stable: boolean,
   reason: SimResult['reason'],
 ): SimResult {
-  // 各相单独可达集（§5.4 三相电机）
+  // 各相单独可达集（§5.4 三相电机）：遍历同样不得穿过其它电位的极节点
   const reachFrom = (pot: string) =>
-    bfs(s.ps.filter((p) => p.potential === pot).map((p) => p.node), s.adjAll);
+    bfs(
+      s.ps.filter((p) => p.potential === pot).map((p) => p.node),
+      s.adjAll,
+      poleStops(s.ps, (x) => x === pot),
+    );
   const reachL1 = reachFrom('L1');
   const reachL2 = reachFrom('L2');
   const reachL3 = reachFrom('L3');
   const phaseReaches = [reachL1, reachL2, reachL3];
 
+  // §5.2 两端负载是否工作：剔除该负载自身的边后，两端分别可达火线/零线
+  // （理由同 step 内注释：防止倒穿自身边的假可达）
+  const hotStarts = s.ps.filter((p) => p.potential !== 'N').map((p) => p.node);
+  const nStarts = s.ps.filter((p) => p.potential === 'N').map((p) => p.node);
+  const stopN = poleStops(s.ps, (pot) => pot !== 'N');
+  const stopHot = poleStops(s.ps, (pot) => pot === 'N');
+  const worksPair = (comp: Component, a: NodeId, b: NodeId): boolean => {
+    const adj = adjacency(s.edges.filter((e) => e.owner !== comp.id), true);
+    const rh = bfs(hotStarts, adj, stopN);
+    const rn = bfs(nStarts, adj, stopHot);
+    return (rh.has(a) && rn.has(b)) || (rh.has(b) && rn.has(a));
+  };
+
   const motorRuns = (comp: Component): boolean => {
     if (comp.rules?.motorMode === 'simplified') {
-      const a = nodeOf(dsu, comp.id, 'U');
-      const b = nodeOf(dsu, comp.id, 'V');
-      return (
-        (s.reachHot.has(a) && s.reachN.has(b)) ||
-        (s.reachHot.has(b) && s.reachN.has(a))
-      );
+      return worksPair(comp, nodeOf(dsu, comp.id, 'U'), nodeOf(dsu, comp.id, 'V'));
     }
     const t = [
       nodeOf(dsu, comp.id, 'U'),
@@ -322,14 +355,8 @@ function buildResult(
     );
   };
 
-  const isLoadWorking = (comp: Component): boolean => {
-    const a = nodeOf(dsu, comp.id, 'L');
-    const b = nodeOf(dsu, comp.id, 'N');
-    return (
-      (s.reachHot.has(a) && s.reachN.has(b)) ||
-      (s.reachHot.has(b) && s.reachN.has(a))
-    );
-  };
+  const isLoadWorking = (comp: Component): boolean =>
+    worksPair(comp, nodeOf(dsu, comp.id, 'L'), nodeOf(dsu, comp.id, 'N'));
 
   const out: SimComponentOut[] = c.components.map((comp) => {
     const o: SimComponentOut = { id: comp.id };
@@ -445,11 +472,19 @@ function checkGeneral(
       componentEdges(comp, dsu, new Map(), true),
     );
     const bestAdj = adjacency(bestEdges, true);
+    const starts = (pots: string[]) =>
+      s.ps.filter((p) => pots.includes(p.potential)).map((p) => p.node);
     const reachBest = (pots: string[]) =>
-      bfs(s.ps.filter((p) => pots.includes(p.potential)).map((p) => p.node), bestAdj);
-    const bestHot = reachBest(['L', 'L1', 'L2', 'L3']);
-    const bestN = reachBest(['N']);
+      bfs(starts(pots), bestAdj, poleStops(s.ps, (x) => pots.includes(x)));
     const bestPhases = [reachBest(['L1']), reachBest(['L2']), reachBest(['L3'])];
+    // 两端负载的最好情况可达：同 §5.2，剔除该负载自身的边、极点吸收
+    const bestPossible = (comp: Component, a: NodeId, b: NodeId): boolean => {
+      const adj = adjacency(bestEdges.filter((e) => e.owner !== comp.id), true);
+      const hots = ['L', 'L1', 'L2', 'L3'];
+      const rh = bfs(starts(hots), adj, poleStops(s.ps, (x) => hots.includes(x)));
+      const rn = bfs(starts(['N']), adj, poleStops(s.ps, (x) => x === 'N'));
+      return (rh.has(a) && rn.has(b)) || (rh.has(b) && rn.has(a));
+    };
 
     const wired = (id: string, terms: string[]) =>
       terms.every((t) => referenced.has(pin(id, t)));
@@ -466,9 +501,7 @@ function checkGeneral(
         if (!wired(comp.id, pair)) continue; // 悬空已单独报
         const a = nodeOf(dsu, comp.id, pair[0]);
         const b = nodeOf(dsu, comp.id, pair[1]);
-        const possible =
-          (bestHot.has(a) && bestN.has(b)) || (bestHot.has(b) && bestN.has(a));
-        if (!possible) {
+        if (!bestPossible(comp, a, b)) {
           errors.push({
             code: 'open_circuit',
             componentId: comp.id,

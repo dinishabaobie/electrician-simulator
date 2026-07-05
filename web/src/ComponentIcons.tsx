@@ -269,6 +269,132 @@ export function ComponentIcon({ nid, type, def, state, sim, tag }: Props) {
         contactorDefs(g),
       );
 
+    // ---- 辅助常闭（线圈失电时闭合，得电断开；闭合导通显绿）----
+    case 'contactor_nc':
+      return wrap(
+        <>
+          {leads(def, w, h, { in: [cx - 26, (h * 70) / 100], out: [cx + 26, (h * 70) / 100] })}
+          <rect x={cx - 30} y={8} width={60} height={h - 22} rx={4} fill={`url(#${g('case')})`} stroke="#11161c" strokeWidth={1} />
+          <circle cx={cx - 14} cy={cy - 2} r={3} fill="#cbd5e1" />
+          <circle cx={cx + 14} cy={cy - 2} r={3} fill="#cbd5e1" />
+          <line x1={cx - 14} y1={cy - 2} x2={closed ? cx + 14 : cx + 8} y2={closed ? cy - 2 : cy - 12}
+            stroke={closed ? '#37e07f' : '#9aa7b3'} strokeWidth={3} strokeLinecap="round" />
+          {/* NC 标记：触点上方一道小竖杠（电工符号里常闭的斜杠意象） */}
+          <line x1={cx + 17} y1={cy - 10} x2={cx + 11} y2={cy + 2} stroke="#e5e7eb" strokeWidth={1.4} />
+          <text x={cx} y={h - 16} textAnchor="middle" fontSize="9" fontWeight="700" fill="#e5e7eb">{km}</text>
+          <circle cx={cx - 26} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
+          <circle cx={cx + 26} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
+        </>,
+        contactorDefs(g),
+      );
+
+    // ---- 指示灯（面板圆形信号灯）----
+    case 'indicator': {
+      const litI = !!sim?.working;
+      const tx = (p: number) => (w * p) / 100;
+      return wrap(
+        <>
+          {litI && <circle cx={cx} cy={30} r={26} fill={`url(#${g('iglow')})`} />}
+          <circle cx={cx} cy={30} r={16} fill="#cdd6df" />
+          <circle cx={cx} cy={30} r={12} fill={litI ? `url(#${g('ilens')})` : '#5b6675'} stroke={litI ? '#e6a700' : '#94a3b8'} strokeWidth={1.2} />
+          <ellipse cx={cx - 4} cy={26} rx={3.5} ry={2.2} fill="#fff" opacity={0.5} />
+          <rect x={cx - 8} y={45} width={16} height={12} rx={2} fill="#3f4651" />
+          <path d={`M${cx - 4},57 L${tx(35)},${h}`} fill="none" stroke={WIRE} strokeWidth={2.4} strokeLinecap="round" />
+          <path d={`M${cx + 4},57 L${tx(65)},${h}`} fill="none" stroke={WIRE} strokeWidth={2.4} strokeLinecap="round" />
+          <circle cx={tx(35)} cy={h} r={3} fill="#cbd5e1" stroke="#64748b" strokeWidth={1} />
+          <circle cx={tx(65)} cy={h} r={3} fill="#cbd5e1" stroke="#64748b" strokeWidth={1} />
+        </>,
+        <defs>
+          <radialGradient id={g('ilens')} cx="40%" cy="35%" r="80%">
+            <stop offset="0%" stopColor="#fff7cc" /><stop offset="60%" stopColor="#ffd23f" />
+            <stop offset="100%" stopColor="#e6a700" />
+          </radialGradient>
+          <radialGradient id={g('iglow')} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#ffe98a" stopOpacity={0.9} />
+            <stop offset="100%" stopColor="#ffe98a" stopOpacity={0} />
+          </radialGradient>
+        </defs>,
+      );
+    }
+
+    // ---- 轴流风机（圆形风罩 + 叶片，运行显绿并出风符号）----
+    case 'fan': {
+      const runF = !!sim?.working;
+      const tx = (p: number) => (w * p) / 100;
+      const bcy = 34;
+      return wrap(
+        <>
+          <rect x={cx - 30} y={6} width={60} height={56} rx={6} fill="#2f3742" stroke="#11161c" strokeWidth={1} />
+          <circle cx={cx} cy={bcy} r={23} fill="#1c2530" stroke={runF ? '#1f9d55' : '#5b6675'} strokeWidth={2} />
+          {/* 叶片 */}
+          {[0, 120, 240].map((a) => (
+            <path key={a} d={`M${cx},${bcy} q10,-14 2,-19`} fill="none"
+              stroke={runF ? '#5ee49b' : '#8a97a5'} strokeWidth={3.4} strokeLinecap="round"
+              transform={`rotate(${a + (runF ? 25 : 0)} ${cx} ${bcy})`} />
+          ))}
+          <circle cx={cx} cy={bcy} r={4} fill={runF ? '#37e07f' : '#7c8794'} />
+          {runF && <text x={cx + 25} y={16} fontSize="11" fill="#1f9d55">↻</text>}
+          <path d={`M${cx - 6},62 L${tx(35)},${h}`} fill="none" stroke={WIRE} strokeWidth={2.4} strokeLinecap="round" />
+          <path d={`M${cx + 6},62 L${tx(65)},${h}`} fill="none" stroke={WIRE} strokeWidth={2.4} strokeLinecap="round" />
+          <circle cx={tx(35)} cy={h} r={3} fill="#cbd5e1" stroke="#64748b" strokeWidth={1} />
+          <circle cx={tx(65)} cy={h} r={3} fill="#cbd5e1" stroke="#64748b" strokeWidth={1} />
+        </>,
+      );
+    }
+
+    // ---- 热继电器·三相热元件（灰蓝壳 + 双金属片，动作后红色断开）----
+    case 'thermal_main': {
+      const tripped = !!state?.tripped;
+      const fr = tag ?? 'FR';
+      const cols = [0.25, 0.5, 0.75].map((p) => p * w);
+      return wrap(
+        <>
+          {cols.map((x, i) => (
+            <g key={i}>
+              <line x1={x} y1={0} x2={x} y2={18} stroke={WIRE} strokeWidth={2.4} />
+              <line x1={x} y1={h} x2={x} y2={h - 18} stroke={WIRE} strokeWidth={2.4} />
+              <circle cx={x} cy={18} r={4} fill={`url(#${g('screw')})`} />
+              <circle cx={x} cy={h - 18} r={4} fill={`url(#${g('screw')})`} />
+            </g>
+          ))}
+          <rect x={10} y={20} width={w - 20} height={h - 40} rx={5} fill={`url(#${g('frcase')})`} stroke="#334155" strokeWidth={1} />
+          {cols.map((x, i) => (
+            <g key={i}>
+              {/* 双金属片：正常时直通，过载动作后弹开变红 */}
+              <line x1={x} y1={24} x2={tripped ? x + 9 : x} y2={h - 24}
+                stroke={tripped ? '#ef4444' : '#37e07f'} strokeWidth={3} strokeLinecap="round" />
+              <rect x={x - 4.5} y={cy - 6} width={9} height={12} rx={1.5}
+                fill="none" stroke={tripped ? '#ef4444' : '#94a3b8'} strokeWidth={1.4} />
+            </g>
+          ))}
+          <line x1={cols[0]} y1={cy} x2={cols[2]} y2={cy} stroke="#64748b" strokeWidth={1.2} strokeDasharray="3 3" />
+          <text x={14} y={cy + 3} fontSize="8" fontWeight="700" fill="#e5e7eb">{fr}</text>
+          {tripped && <text x={w - 14} y={cy + 3} textAnchor="end" fontSize="8" fontWeight="700" fill="#fca5a5">过载</text>}
+        </>,
+        thermalDefs(g),
+      );
+    }
+
+    // ---- 热继电器·控制常闭（正常闭合，动作后断开）----
+    case 'thermal_nc': {
+      const tripped = !!state?.tripped;
+      const fr = tag ?? 'FR';
+      return wrap(
+        <>
+          {leads(def, w, h, { in: [cx - 26, (h * 70) / 100], out: [cx + 26, (h * 70) / 100] })}
+          <rect x={cx - 30} y={8} width={60} height={h - 22} rx={4} fill={`url(#${g('frcase')})`} stroke="#334155" strokeWidth={1} />
+          <circle cx={cx - 14} cy={cy - 2} r={3} fill="#cbd5e1" />
+          <circle cx={cx + 14} cy={cy - 2} r={3} fill="#cbd5e1" />
+          <line x1={cx - 14} y1={cy - 2} x2={tripped ? cx + 8 : cx + 14} y2={tripped ? cy - 12 : cy - 2}
+            stroke={tripped ? '#ef4444' : '#37e07f'} strokeWidth={3} strokeLinecap="round" />
+          <text x={cx} y={h - 16} textAnchor="middle" fontSize="9" fontWeight="700" fill="#e5e7eb">{fr}</text>
+          <circle cx={cx - 26} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
+          <circle cx={cx + 26} cy={(h * 70) / 100} r={4} fill={`url(#${g('screw')})`} />
+        </>,
+        thermalDefs(g),
+      );
+    }
+
     // ---- 单相电源：插座面板 ----
     case 'single_phase_power':
       return wrap(
@@ -323,6 +449,22 @@ export function ComponentIcon({ nid, type, def, state, sim, tag }: Props) {
     default:
       return wrap(<rect x={4} y={4} width={w - 8} height={h - 8} rx={4} fill="#fff" stroke={WIRE} />);
   }
+}
+
+function thermalDefs(g: (s: string) => string) {
+  return (
+    <defs>
+      <linearGradient id={g('frcase')} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#526075" />
+        <stop offset="50%" stopColor="#3b4759" />
+        <stop offset="100%" stopColor="#2b3443" />
+      </linearGradient>
+      <radialGradient id={g('screw')} cx="40%" cy="35%" r="75%">
+        <stop offset="0%" stopColor="#f1f5f9" />
+        <stop offset="100%" stopColor="#94a3b8" />
+      </radialGradient>
+    </defs>
+  );
 }
 
 function contactorDefs(g: (s: string) => string) {

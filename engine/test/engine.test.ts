@@ -298,3 +298,90 @@ test('热继电器过载动作：控制回路断、电机停', () => {
   r = simulate(tripped);
   assert.equal(find(tripped, r, 'M').working, false);
 });
+
+// ---- §5.2 剔除自身边：多线圈共零线排不互相“倒灌” ----
+test('两个线圈共零线排：只有回路接通的线圈得电，另一个不被倒灌误判', () => {
+  // KM1 支路：L → SW(合) → KM1 线圈 → N
+  // KM2 支路：L → SB(常开未按) → KM2 线圈 → N（A2 与 KM1 共零线排）
+  const c = circuit(
+    [
+      C.power1('P'), C.sw('SW', true), C.btnNO('SB'),
+      C.coil('KM1_C', 'g1'), C.coil('KM2_C', 'g2'),
+    ],
+    [
+      w('P', 'L', 'SW', 'in'),
+      w('SW', 'out', 'KM1_C', 'A1'),
+      w('KM1_C', 'A2', 'P', 'N'),
+      w('P', 'L', 'SB', 'in'),
+      w('SB', 'out', 'KM2_C', 'A1'),
+      w('KM2_C', 'A2', 'P', 'N'),
+    ],
+  );
+  const r = simulate(c);
+  assert.equal(find(c, r, 'KM1_C').energized, true);
+  assert.equal(find(c, r, 'KM2_C').energized, false, 'KM2 断着不应经零线排倒灌得电');
+  assert.equal(r.errors.length, 0);
+});
+
+// ---- §5.2 极点吸收：断电支路挂在零线排上的负载岛不被“倒灌” ----
+test('负载岛：节点只经多个负载连到零线排，负载不应误判工作', () => {
+  // 工作支路：L → SW(合) → 灯 HL → N
+  // 负载岛：节点 X 只通过 线圈C 和 灯 LP2 连到零线排（上游开关断开）
+  const c = circuit(
+    [
+      C.power1('P'), C.sw('SW', true), C.lamp('HL'),
+      C.sw('S2', false), C.coil('C', 'g'), C.lamp('LP2'),
+    ],
+    [
+      w('P', 'L', 'SW', 'in'),
+      w('SW', 'out', 'HL', 'L'),
+      w('HL', 'N', 'P', 'N'),
+      w('P', 'L', 'S2', 'in'),
+      w('S2', 'out', 'C', 'A1'),     // X = S2.out / C.A1 / LP2.L
+      w('S2', 'out', 'LP2', 'L'),
+      w('C', 'A2', 'P', 'N'),
+      w('LP2', 'N', 'P', 'N'),
+    ],
+  );
+  const r = simulate(c);
+  assert.equal(find(c, r, 'HL').working, true, '正常支路的灯应亮');
+  assert.equal(find(c, r, 'LP2').working, false, '断电岛上的灯不应经零线排倒灌点亮');
+  assert.equal(find(c, r, 'C').energized, false, '断电岛上的线圈不应得电');
+  assert.equal(r.errors.length, 0, 'S2 合上就能成回路，不应报结构性断路');
+});
+
+// ---- 13：热继三相热元件（主回路串联）----
+test('热继热元件：正常导通电机转，过载动作三相一起断、电机停', () => {
+  const build = (tripped: boolean): Circuit =>
+    circuit(
+      [
+        C.power3('P'), C.sw('SW', true), C.coil('KM_C', 'g'),
+        C.main('KM_M', 'g'), C.thermalMain('FR_M', tripped), C.motor('M'),
+      ],
+      [
+        w('P', 'L1', 'SW', 'in'),
+        w('SW', 'out', 'KM_C', 'A1'),
+        w('KM_C', 'A2', 'P', 'N'),
+        w('P', 'L1', 'KM_M', 'L1'),
+        w('P', 'L2', 'KM_M', 'L2'),
+        w('P', 'L3', 'KM_M', 'L3'),
+        w('KM_M', 'T1', 'FR_M', 'L1'),
+        w('KM_M', 'T2', 'FR_M', 'L2'),
+        w('KM_M', 'T3', 'FR_M', 'L3'),
+        w('FR_M', 'T1', 'M', 'U'),
+        w('FR_M', 'T2', 'M', 'V'),
+        w('FR_M', 'T3', 'M', 'W'),
+      ],
+    );
+
+  const ok = build(false);
+  let r = simulate(ok);
+  assert.equal(find(ok, r, 'M').working, true);
+  assert.equal(r.errors.length, 0);
+
+  // 过载动作：三相断开，电机停；故障态不参与结构性放宽，断路会被上报（§7/§8）
+  const tripped = build(true);
+  r = simulate(tripped);
+  assert.equal(find(tripped, r, 'M').working, false);
+  assert.equal(find(tripped, r, 'FR_M').faulted, true);
+});
