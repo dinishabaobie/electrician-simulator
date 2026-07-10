@@ -1,9 +1,18 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
+import { sites } from './sites-vite-plugin';
 
-// 部署到 GitHub Pages 的项目页：https://dinishabaobie.github.io/electrician-simulator/
-// 构建时用子路径，本地开发仍用根路径。
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/electrician-simulator/' : '/',
-  plugins: [react()],
-}));
+export default defineConfig(async () => {
+  const isGitHubPages = process.env.GITHUB_ACTIONS === 'true';
+  const plugins: PluginOption[] = [react()];
+
+  if (!isGitHubPages) {
+    const { cloudflare } = await import('@cloudflare/vite-plugin');
+    plugins.push(sites(), cloudflare({ viteEnvironment: { name: 'server' } }));
+  }
+
+  return {
+    base: isGitHubPages ? '/electrician-simulator/' : '/',
+    plugins,
+  };
+});
