@@ -171,11 +171,12 @@ function buildCircuit(nodes: Node[], edges: Edge[]): Circuit {
 }
 
 const INITIAL_NODES = PRACTICES[0].items.map(nodeFromPreset);
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 export default function App() {
   const [practice, setPractice] = useState<Practice>(PRACTICES[0]);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(INITIAL_NODES);
-  // 画布初始留空白，让学习者自己接线；正确接线由「正确答案」按钮按需画出
+  // 画布初始留空白，让学习者自己接线；正确接线由「正确布线」按钮按需画出
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [result, setResult] = useState<SimResult | null>(null);
   const [semantic, setSemantic] = useState<CheckError[] | null>(null);
@@ -188,7 +189,7 @@ export default function App() {
 
   // 时间继电器（ZN96）：引擎判「本体得电」，UI 负责计时——得电后倒数，
   // 到点把同组延时触点闭合并重算；本体失电立即复位（断开触点、清计时）。
-  const TIMER_DELAY = 5; // 秒
+  const TIMER_DELAY = 3; // 秒
   const timersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const nodesRef = useRef<Node[]>([]);
   const edgesRef = useRef<Edge[]>([]);
@@ -305,7 +306,7 @@ export default function App() {
     setPractice(p);
     const nds = p.items.map(nodeFromPreset);
     setNodes(nds);
-    setEdges([]); // 留空白让用户自接；正确接线点「正确答案」按需显示
+    setEdges([]); // 留空白让用户自接；正确接线点「正确布线」按需显示
     setResult(null);
     setSemantic(null);
     past.current = [];
@@ -493,7 +494,7 @@ export default function App() {
         {showLeft && (
         <aside className="palette">
           <h1>电工模拟器</h1>
-          <div className="palette-group">
+          <div className="palette-group practice-list">
             <div className="palette-title">选择练习</div>
             {PRACTICES.map((p) => (
               <button
@@ -505,22 +506,26 @@ export default function App() {
               </button>
             ))}
           </div>
-          <p className="hint goal">🎯 {practice.goal}</p>
-          <div className="palette-group">
-            <button className="primary" onClick={() => recompute(nodes, edges)}>▶ 运行模拟</button>
-            <button onClick={check}>🔍 检查电路</button>
-            <button className="answer" onClick={showAnswer}>✅ 正确答案</button>
-            <button onClick={undo} disabled={histLen === 0}>↶ 撤回</button>
-            <button onClick={() => loadPractice(practice)}>↺ 重置</button>
+          <div className="palette-group action-group">
+            <div className="palette-title">布线操作</div>
+            <button className="check" onClick={check}>🔍 检查电路</button>
+            <button className="answer" onClick={showAnswer}>✅ 正确布线</button>
+            <div className="utility-actions">
+              <button onClick={undo} disabled={histLen === 0}>↶ 撤回</button>
+              <button onClick={() => loadPractice(practice)}>↺ 重置</button>
+            </div>
           </div>
           <div className="tips">
+            <div className="section-label">操作提示</div>
             接线：从端子（小圆点）拖到另一个端子，端子不分方向。走线自动绕开元件、平行线自动分道；实心圆点表示多线相连。<br />
-            画布：双指滑动平移，双指捏合缩放，空白处拖动也可平移。<br />
+            画布（Mac）：双指滑动平移，双指捏合缩放，空白处拖动也可平移。<br />
+            画布（Windows）：鼠标滚轮缩放，空白处按住左键拖动平移，也可用左下角 ＋ / － 缩放。<br />
             开关：点击切换合/断。<br />
             按钮：按住生效，松开复位。<br />
             删线：选中线后按 Delete 键。
           </div>
           <div className="legend">
+            <div className="section-label">线缆标识</div>
             <div><span className="sw" style={{ background: '#dc2626' }} />火线 / 相</div>
             <div><span className="sw" style={{ background: '#2563eb' }} />零线 N</div>
             <div>
@@ -563,8 +568,8 @@ export default function App() {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             nodeDragThreshold={5}
-            panOnScroll
-            zoomOnScroll={false}
+            panOnScroll={IS_MAC}
+            zoomOnScroll={!IS_MAC}
             zoomOnPinch
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
@@ -600,7 +605,7 @@ export default function App() {
         {showRight && (
         <aside className="panel">
           <h2>运行状态</h2>
-          {!result && <p className="muted">尚未运行。接好线后点「运行模拟」。</p>}
+          {!result && <p className="muted">连接任意端子开始，运行状态会自动更新。</p>}
           {result && (
             <>
               {result.reason && (
