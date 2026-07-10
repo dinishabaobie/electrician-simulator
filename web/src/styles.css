@@ -44,17 +44,23 @@ button:focus-visible {
   background: #edf2f8;
 }
 
+/* 左右侧栏共用外观 */
+.palette,
+.panel {
+  padding: 22px 18px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #fbfcfe 0%, #f5f8fb 100%);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
 /* 左侧练习与操作区 */
 .palette {
   width: 260px;
   flex: 0 0 260px;
-  padding: 22px 18px 18px;
-  overflow-y: auto;
-  background: linear-gradient(180deg, #fbfcfe 0%, #f4f7fb 100%);
+  padding-bottom: 18px;
   border-right: 1px solid var(--line);
   box-shadow: 5px 0 24px rgba(30, 52, 79, 0.05);
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
 }
 
 .palette h1 {
@@ -76,7 +82,7 @@ button:focus-visible {
   height: 34px;
   border-radius: 10px;
   color: #fff;
-  background: linear-gradient(145deg, #2563eb, #1646bc);
+  background: linear-gradient(145deg, var(--brand), #1646bc);
   box-shadow: 0 7px 16px rgba(37, 99, 235, 0.24);
   font-size: 17px;
 }
@@ -90,10 +96,24 @@ button:focus-visible {
 
 .palette-title,
 .section-label {
-  color: #8090a7;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #33415c;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+/* 品牌色小竖条：把分组标题从正文里立出来 */
+.palette-title::before,
+.section-label::before {
+  content: "";
+  width: 3.5px;
+  height: 13px;
+  flex: 0 0 auto;
+  border-radius: 99px;
+  background: linear-gradient(180deg, var(--brand), #6ea0ff);
 }
 
 .palette-title {
@@ -133,13 +153,65 @@ button:focus-visible {
 
 .practice-list button { text-align: left; }
 
-.palette button.active {
-  position: relative;
-  padding-left: 16px;
+/* 练习分组折叠 */
+.practice-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.practice-cat > button:not(.cat-header) { margin-left: 12px; }
+
+.palette button.cat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 0;
+  color: #45536e;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 750;
+}
+
+.palette button.cat-header:hover {
+  transform: none;
+  background: rgba(37, 99, 235, 0.07);
+  box-shadow: none;
+}
+
+.cat-header .caret {
+  color: #8090a7;
+  font-size: 10px;
+  transition: transform 140ms ease;
+}
+
+.cat-header.open .caret { transform: rotate(90deg); }
+
+.cat-header .cat-count {
+  min-width: 20px;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: #5b6b86;
+  background: #e6edf8;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.palette button.active,
+.palette button.check {
   color: #fff;
   border-color: var(--brand);
   background: linear-gradient(135deg, #2f6fe8, #1f56cf);
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.palette button.active {
+  position: relative;
+  padding-left: 16px;
 }
 
 .palette button.active::before {
@@ -157,13 +229,6 @@ button:focus-visible {
 .action-group {
   padding-top: 20px;
   border-top: 1px solid var(--line);
-}
-
-.palette button.check {
-  color: #fff;
-  border-color: var(--brand);
-  background: linear-gradient(135deg, #2f6fe8, #1f56cf);
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
 }
 
 .palette button.check:hover {
@@ -212,9 +277,15 @@ button:focus-visible {
   line-height: 1.8;
 }
 
+/* 练习目标：用品牌浅底与操作提示区分开 */
+.tips.goal {
+  color: #3d4f6e;
+  border-color: #c7d7f5;
+  background: var(--brand-soft);
+}
+
 .section-label {
   margin-bottom: 8px;
-  color: #718198;
 }
 
 .legend {
@@ -347,17 +418,12 @@ button:focus-visible {
 .schematic-ref.collapsed .body { display: none; }
 .schematic-ref svg { display: block; width: 100%; height: auto; }
 
-/* 右侧运行状态 */
+/* 右侧运行状态（共用外观见文件头部 .palette, .panel） */
 .panel {
   width: 272px;
   flex: 0 0 272px;
-  padding: 22px 18px;
-  overflow-y: auto;
   border-left: 1px solid var(--line);
-  background: linear-gradient(180deg, #fbfcfe 0%, #f5f8fb 100%);
   box-shadow: -5px 0 24px rgba(30, 52, 79, 0.04);
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
 }
 
 .panel h2 {
@@ -400,7 +466,8 @@ button:focus-visible {
 
 .muted { color: #7b8ba1; background: #fff; }
 .ok { color: var(--success); border-color: #b8e2c8; background: var(--success-soft); }
-.panel > .err { color: #b42318; border-color: #f2c4c1; background: #fff1f0; }
+.panel > .err,
+.error-list .err { color: #b42318; border-color: #f2c4c1; background: #fff1f0; }
 
 .status-list,
 .error-list {
@@ -433,7 +500,6 @@ button:focus-visible {
 }
 
 .error-list .warn { color: #8a5a00; border-color: #f3d59a; background: #fff8e8; }
-.error-list .err { color: #b42318; border-color: #f2c4c1; background: #fff1f0; }
 
 /* 元件节点：图形为主，编号/状态作角标 */
 .node {

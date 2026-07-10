@@ -1,5 +1,8 @@
 import type { Expected } from '../../engine/src/types.ts';
 
+// 时间继电器（ZN96）延时秒数：UI 计时与练习目标文案共用的单一来源
+export const TIMER_DELAY_SECONDS = 3;
+
 export interface PresetItem {
   id: string;
   type: string;
@@ -19,6 +22,8 @@ export interface PresetWire {
 export interface Practice {
   key: string;
   name: string;
+  // 侧栏分组（如「基础电路」「接触器控制」；将来故障题用「故障排查」）
+  category: string;
   goal: string;
   items: PresetItem[];
   wires?: PresetWire[]; // 标准答案接线，加载时自动连好（不填则空白让用户自接）
@@ -28,6 +33,7 @@ export interface Practice {
 export const PRACTICES: Practice[] = [
   {
     key: 'single_light',
+    category: '基础电路',
     name: '单灯单控',
     goal: '接成 L → 开关 → 灯泡 → N，点开关让灯亮灭。',
     items: [
@@ -45,6 +51,7 @@ export const PRACTICES: Practice[] = [
   },
   {
     key: 'point_control',
+    category: '接触器控制',
     name: '接触器点动',
     goal: '控制回路 L1→停止(常闭)→启动(常开)→线圈→N；主回路 三相→主触点→电机。按住启动电机转，松开即停。',
     items: [
@@ -81,6 +88,7 @@ export const PRACTICES: Practice[] = [
   },
   {
     key: 'self_lock',
+    category: '接触器控制',
     name: '接触器自锁',
     goal: '在启动按钮上并联一个接触器辅助常开触点。按启动后松开仍保持运行，按停止才停。',
     items: [
@@ -130,6 +138,7 @@ export const PRACTICES: Practice[] = [
   },
   {
     key: 'self_lock_overload',
+    category: '接触器控制',
     name: '自锁 + 热保护',
     goal: '在自锁电路上加热继电器 FR：热元件串入主回路，常闭触点串入控制回路。点击 FR 模拟过载动作——电机停转且不会自行重启；再点击复位后需重新按启动。',
     items: [
@@ -193,6 +202,7 @@ export const PRACTICES: Practice[] = [
   },
   {
     key: 'seq_start',
+    category: '接触器控制',
     name: '两台电机顺序启动',
     goal: '教材接法：FR1、FR2 常闭串在控制总线（任一台过载两台全停）；SB12 停 M1——顺序触点会让 M2 级联跟停；SB22 单独停 M2；M2 支路串 KM1 辅助常开（顺序联锁），必须先启动 M1 才能启动 M2。',
     items: [
@@ -303,6 +313,7 @@ export const PRACTICES: Practice[] = [
   },
   {
     key: 'interlock',
+    category: '接触器控制',
     name: '接触器互锁',
     goal: '两条支路各串对方的辅助常闭：KM2 吸合时它的常闭断开，KM3 就进不来（反之亦然），保证两个接触器永不同时吸合。先合一个挡，再试另一个挡体会互锁；换挡要先退出当前挡。（实物中两个开关是一个联动手柄，不会同时合上）',
     items: [
@@ -353,8 +364,9 @@ export const PRACTICES: Practice[] = [
   },
   {
     key: 'traction',
+    category: '综合实战',
     name: '牵引机控制回路',
-    goal: '火车牵引机（简化）：先合 QF1（主电源，HL1~3 亮）再合 QF2（控制电源）→ ZN96 时间继电器自动计时 3 秒，到点 KT1 延时触点自动闭合 → 按 SB1 → KM1 吸合自锁、风机 MF1/MF2 转；SA2 选挡使 KM2 或 KM3 吸合（互锁）；KM1 与任一挡都吸合时牵引电机才转。电压真模拟：KM2=60V 抽头→直流 81V 全速；KM3=30V 抽头→40.5V 半速；PA1/PV1 真实读数。断 QF2 计时复位。',
+    goal: `火车牵引机（简化）：先合 QF1（主电源，HL1~3 亮）再合 QF2（控制电源）→ ZN96 时间继电器自动计时 ${TIMER_DELAY_SECONDS} 秒，到点 KT1 延时触点自动闭合 → 按 SB1 → KM1 吸合自锁、风机 MF1/MF2 转；SA2 选挡使 KM2 或 KM3 吸合（互锁）；KM1 与任一挡都吸合时牵引电机才转。电压真模拟：KM2=60V 抽头→直流 81V 全速；KM3=30V 抽头→40.5V 半速；PA1/PV1 真实读数。断 QF2 计时复位。`,
     items: [
       { id: 'PWR', type: 'three_phase_power', x: 30, y: 30 },
       // 进线：JX1 接线端子排 + PE 保护接地（装饰层）
@@ -524,3 +536,8 @@ export const PRACTICES: Practice[] = [
     },
   },
 ];
+
+// 打开页面默认加载的练习（与数据同源，改名/删除会在启动时立刻报错而非静默回退）
+const defaultPractice = PRACTICES.find((p) => p.key === 'traction');
+if (!defaultPractice) throw new Error('默认练习 traction 不存在，请检查 PRACTICES');
+export const DEFAULT_PRACTICE: Practice = defaultPractice;

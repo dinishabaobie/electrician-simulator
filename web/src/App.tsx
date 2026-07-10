@@ -22,7 +22,13 @@ import { CircuitNode } from './CircuitNode.tsx';
 import { SchematicRef } from './SchematicRef.tsx';
 import { CircuitCtx } from './circuitContext.ts';
 import { DEFS, defaultState } from './componentDefs.ts';
-import { PRACTICES, type Practice, type PresetItem } from './presets.ts';
+import {
+  DEFAULT_PRACTICE,
+  PRACTICES,
+  TIMER_DELAY_SECONDS,
+  type Practice,
+  type PresetItem,
+} from './presets.ts';
 import { simulate, checkTemplate } from '../../engine/src/engine.ts';
 import type { Circuit, SimResult, CheckError } from '../../engine/src/types.ts';
 
@@ -170,9 +176,16 @@ function buildCircuit(nodes: Node[], edges: Edge[]): Circuit {
   return { schemaVersion: 1, components, wires };
 }
 
-const DEFAULT_PRACTICE = PRACTICES.find((p) => p.key === 'traction') ?? PRACTICES[0];
 const INITIAL_NODES = DEFAULT_PRACTICE.items.map(nodeFromPreset);
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+// 侧栏分组：按 category 首次出现的顺序排列
+const CATEGORIES = [...new Set(PRACTICES.map((p) => p.category))];
+// 手势方案与操作提示都由这一个判定驱动，即使判错两者也保持一致
+const IS_MAC =
+  typeof navigator !== 'undefined' &&
+  /mac|iphone|ipad/i.test(
+    (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ??
+      navigator.platform,
+  );
 
 export default function App() {
   const [practice, setPractice] = useState<Practice>(DEFAULT_PRACTICE);
@@ -187,10 +200,20 @@ export default function App() {
   // 侧栏折叠：收起左侧操作栏 / 右侧状态栏，给画布让出全部宽度
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(true);
+  // 练习分组折叠：默认只展开当前练习所在的组
+  const [openCats, setOpenCats] = useState<Set<string>>(
+    () => new Set([DEFAULT_PRACTICE.category]),
+  );
+  function toggleCat(cat: string) {
+    setOpenCats((prev) => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
+  }
 
   // 时间继电器（ZN96）：引擎判「本体得电」，UI 负责计时——得电后倒数，
   // 到点把同组延时触点闭合并重算；本体失电立即复位（断开触点、清计时）。
-  const TIMER_DELAY = 3; // 秒
   const timersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const nodesRef = useRef<Node[]>([]);
   const edgesRef = useRef<Edge[]>([]);
@@ -364,7 +387,7 @@ export default function App() {
 
       if (energized && !contactClosed && !running) {
         // 开始计时：每秒更新剩余秒数，到 0 闭合同组延时触点并重算
-        let remain = TIMER_DELAY;
+        let remain = TIMER_DELAY_SECONDS;
         const setRemain = (v: number | undefined) =>
           setNodes((nds) =>
             nds.map((n) =>
@@ -484,9 +507,7 @@ export default function App() {
   }, [edges, routes, hoverEdgeId, hoverNodeId]);
 
   const allOk =
-    result &&
-    result.errors.length === 0 &&
-    result.shorts.length === 0 &&
+    (!result || (result.errors.length === 0 && result.shorts.length === 0)) &&
     (semantic === null || semantic.length === 0);
 
   return (
@@ -497,15 +518,36 @@ export default function App() {
           <h1>电工模拟器</h1>
           <div className="palette-group practice-list">
             <div className="palette-title">选择练习</div>
-            {PRACTICES.map((p) => (
-              <button
-                key={p.key}
-                className={p.key === practice.key ? 'active' : ''}
-                onClick={() => loadPractice(p)}
-              >
-                {p.name}
-              </button>
-            ))}
+            {CATEGORIES.map((cat) => {
+              const items = PRACTICES.filter((p) => p.category === cat);
+              const open = openCats.has(cat);
+              return (
+                <div key={cat} className="practice-cat">
+                  <button
+                    className={`cat-header${open ? ' open' : ''}`}
+                    onClick={() => toggleCat(cat)}
+                  >
+                    <span className="caret">▸</span>
+                    {cat}
+                    <span className="cat-count">{items.length}</span>
+                  </button>
+                  {open &&
+                    items.map((p) => (
+                      <button
+                        key={p.key}
+                        className={p.key === practice.key ? 'active' : ''}
+                        onClick={() => loadPractice(p)}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                </div>
+              );
+            })}
+          </div>
+          <div className="tips goal">
+            <div className="section-label">练习目标</div>
+            {practice.goal}
           </div>
           <div className="palette-group action-group">
             <div className="palette-title">布线操作</div>
@@ -519,8 +561,11 @@ export default function App() {
           <div className="tips">
             <div className="section-label">操作提示</div>
             接线：从端子（小圆点）拖到另一个端子，端子不分方向。走线自动绕开元件、平行线自动分道；实心圆点表示多线相连。<br />
-            画布（Mac）：双指滑动平移，双指捏合缩放，空白处拖动也可平移。<br />
-            画布（Windows）：鼠标滚轮缩放，空白处按住左键拖动平移，也可用左下角 ＋ / － 缩放。<br />
+            {IS_MAC ? (
+              <>画布：双指滑动平移，双指捏合缩放，空白处拖动也可平移。<br /></>
+            ) : (
+              <>画布：鼠标滚轮缩放，空白处按住左键拖动平移，也可用左下角 ＋ / － 缩放。<br /></>
+            )}
             开关：点击切换合/断。<br />
             按钮：按住生效，松开复位。<br />
             删线：选中线后按 Delete 键。
@@ -626,14 +671,18 @@ export default function App() {
                     </li>
                   ))}
               </ul>
-
+            </>
+          )}
+          {/* 检查结果不依赖模拟是否跑过：空画布上点「检查电路」也要能看到反馈 */}
+          {(result || semantic !== null) && (
+            <>
               <h3>检查结果 {allOk ? '✅' : '⚠️'}</h3>
               {allOk && <p className="ok">没有发现问题。</p>}
               <ul className="error-list">
-                {result.shorts.length > 0 && (
+                {result && result.shorts.length > 0 && (
                   <li className="err">⛔ 短路风险（火线/相与零线无负载直连）。</li>
                 )}
-                {result.errors.map((e, i) => (
+                {result?.errors.map((e, i) => (
                   <li key={`g${i}`} className={e.code === 'short_circuit' ? 'err' : 'warn'}>
                     {e.message}
                   </li>

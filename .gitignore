@@ -4,7 +4,6 @@
 # 构建产物
 **/dist/
 **/build/
-**/.wrangler/
 
 # 日志
 *.log
