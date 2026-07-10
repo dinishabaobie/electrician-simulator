@@ -1,7 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "electrician-simulator",
-  "compatibility_date": "2026-07-10",
+  // 不能超过本地 workerd 支持的最新日期，否则 npm run dev 起不来
+  "compatibility_date": "2026-05-22",
   "main": "./worker/index.ts",
   "assets": {
     "binding": "ASSETS",
