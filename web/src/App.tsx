@@ -170,11 +170,12 @@ function buildCircuit(nodes: Node[], edges: Edge[]): Circuit {
   return { schemaVersion: 1, components, wires };
 }
 
-const INITIAL_NODES = PRACTICES[0].items.map(nodeFromPreset);
+const DEFAULT_PRACTICE = PRACTICES.find((p) => p.key === 'traction') ?? PRACTICES[0];
+const INITIAL_NODES = DEFAULT_PRACTICE.items.map(nodeFromPreset);
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 export default function App() {
-  const [practice, setPractice] = useState<Practice>(PRACTICES[0]);
+  const [practice, setPractice] = useState<Practice>(DEFAULT_PRACTICE);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(INITIAL_NODES);
   // 画布初始留空白，让学习者自己接线；正确接线由「正确布线」按钮按需画出
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
