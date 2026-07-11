@@ -18,7 +18,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 import { routeAll, type Port, type RouteReq } from './routing.ts';
-import { CircuitNode } from './CircuitNode.tsx';
+import { CircuitNode, displayName, statusText } from './CircuitNode.tsx';
 import { SchematicRef } from './SchematicRef.tsx';
 import { CircuitCtx } from './circuitContext.ts';
 import { DEFS, defaultState } from './componentDefs.ts';
@@ -624,7 +624,7 @@ export default function App() {
             snapGrid={[16, 16]}
             fitView
           >
-            <Background />
+            <Background gap={22} size={1.4} color="#c9d5e4" />
             <Controls />
             <ViewportPortal>
               {junctions.map((d) => (
@@ -651,7 +651,13 @@ export default function App() {
         {showRight && (
         <aside className="panel">
           <h2>运行状态</h2>
-          {!result && <p className="muted">连接任意端子开始，运行状态会自动更新。</p>}
+          {!result && (
+            <div className="empty-state">
+              <span className="empty-icon">🔌</span>
+              <p>电路还没有通电</p>
+              <p className="sub">从任意端子拖出第一根线，各元件的运行状态会实时显示在这里。</p>
+            </div>
+          )}
           {result && (
             <>
               {result.reason && (
@@ -663,13 +669,22 @@ export default function App() {
               <ul className="status-list">
                 {result.components
                   .filter((c) => c.working !== undefined || c.energized !== undefined)
-                  .map((c) => (
-                    <li key={c.id}>
-                      {c.id}：
-                      {c.working !== undefined && (c.working ? '✅ 工作' : '⚪ 未工作')}
-                      {c.energized !== undefined && (c.energized ? '🔵 得电' : '⚪ 失电')}
-                    </li>
-                  ))}
+                  .map((c) => {
+                    const d = nodes.find((n) => n.id === c.id)?.data as any;
+                    const on = !!(c.working || c.energized);
+                    return (
+                      <li key={c.id} className={on ? 'on' : ''}>
+                        <span className="st-dot" />
+                        <span className="st-name">
+                          {d ? displayName(d) : c.id}
+                          <i className="st-tag">{d?.groupId ?? c.id}</i>
+                        </span>
+                        <span className="st-state">
+                          {d ? statusText(d) : on ? '工作' : '未工作'}
+                        </span>
+                      </li>
+                    );
+                  })}
               </ul>
             </>
           )}

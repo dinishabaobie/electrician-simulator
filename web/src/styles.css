@@ -465,6 +465,44 @@ button:focus-visible {
 }
 
 .muted { color: #7b8ba1; background: #fff; }
+
+/* 未通电时的空状态：居中插画式提示，比一行灰字更有引导感 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 34px 18px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  text-align: center;
+}
+
+.empty-state .empty-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 3px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  font-size: 22px;
+}
+
+.empty-state p {
+  margin: 0;
+  color: #3d4c68;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.empty-state p.sub {
+  color: #8a99b0;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.7;
+}
 .ok { color: var(--success); border-color: #b8e2c8; background: var(--success-soft); }
 .panel > .err,
 .error-list .err { color: #b42318; border-color: #f2c4c1; background: #fff1f0; }
@@ -483,12 +521,65 @@ button:focus-visible {
   gap: 7px;
 }
 
+/* 状态行：指示点 + 中文名/位号 + 右对齐状态值 */
 .status-list li {
-  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 11px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 10px;
   color: #536279;
   background: rgba(255, 255, 255, 0.86);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.status-list li.on {
+  border-color: #b9e3c6;
+  background: #fbfefc;
+}
+
+.status-list .st-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.status-list li.on .st-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16);
+}
+
+.status-list .st-name {
+  overflow: hidden;
+  min-width: 0;
+  color: #3a4a66;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-list .st-tag {
+  margin-left: 5px;
+  color: var(--brand);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.status-list .st-state {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: #8a99b0;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-list li.on .st-state {
+  color: var(--success);
+  font-weight: 700;
 }
 
 .error-list li {
@@ -529,16 +620,16 @@ button:focus-visible {
 
 .node-name {
   position: absolute;
-  top: -20px;
+  top: -22px;
   left: 50%;
   z-index: 2;
-  padding: 3px 7px;
+  padding: 3.5px 8px;
   border: 1px solid #d9e1eb;
-  border-radius: 6px;
+  border-radius: 99px;
   color: #293750;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.05);
-  font-size: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.07);
+  font-size: 10.5px;
   font-weight: 700;
   line-height: 1;
   pointer-events: none;
@@ -556,11 +647,16 @@ button:focus-visible {
 .node-status {
   position: absolute;
   right: 0;
-  bottom: -16px;
+  bottom: -17px;
   color: #748399;
-  font-size: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
   line-height: 1;
   pointer-events: none;
+  /* 白色描边：压在网格点/走线上也能读清 */
+  text-shadow:
+    0 1px 0 #f8fafc, 0 -1px 0 #f8fafc,
+    1px 0 0 #f8fafc, -1px 0 0 #f8fafc;
 }
 
 .node-lamp.is-lit {

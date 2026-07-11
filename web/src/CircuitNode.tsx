@@ -4,8 +4,8 @@ import { DEFS } from './componentDefs.ts';
 import { CircuitCtx } from './circuitContext.ts';
 import { ComponentIcon, sizeOf } from './ComponentIcons.tsx';
 
-// 给新手看的中文名（按角色更贴切，否则用元件类别名）
-function displayName(d: any): string {
+// 给新手看的中文名（按角色更贴切，否则用元件类别名）；运行状态面板也复用
+export function displayName(d: any): string {
   switch (d.role) {
     case 'stop_button': return '停止按钮';
     case 'start_button': return '启动按钮';
@@ -54,7 +54,7 @@ function displayTag(d: any, id: string): string {
   return d.groupId ?? id;
 }
 
-function statusText(d: any): string {
+export function statusText(d: any): string {
   const sim = d.sim ?? {};
   switch (d.type) {
     case 'single_phase_power':
