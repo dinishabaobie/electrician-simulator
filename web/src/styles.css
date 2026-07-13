@@ -284,6 +284,26 @@ button:focus-visible {
   background: var(--brand-soft);
 }
 
+.tips.principle {
+  color: #3f4f63;
+  border-color: #bfdbfe;
+  background: linear-gradient(145deg, #eff6ff, #f8fbff);
+}
+
+.principle-intro {
+  margin-bottom: 7px;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.tips.principle p {
+  margin: 0 0 8px;
+}
+
+.tips.principle p:last-child {
+  margin-bottom: 0;
+}
+
 .section-label {
   margin-bottom: 8px;
 }

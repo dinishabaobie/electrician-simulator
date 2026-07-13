@@ -187,6 +187,41 @@ const IS_MAC =
       navigator.platform,
   );
 
+// 面向零基础学习者：随练习切换，用“电从哪里来、经过什么、产生什么结果”的顺序讲原理。
+const PRACTICE_PRINCIPLES: Record<string, string[]> = {
+  single_light: [
+    '电源的火线 L 先经过开关，再进入灯泡，最后从零线 N 回到电源，形成完整回路。',
+    '开关闭合时回路接通，电流流过灯泡，灯亮；开关断开时回路被切断，灯灭。',
+  ],
+  point_control: [
+    '电路分为控制回路和主回路。控制回路用按钮控制接触器线圈，主回路负责把三相电送给电动机。',
+    '按住启动按钮后，KM1 线圈得电，KM1 主触点随之闭合，三相电进入电动机；松开按钮，线圈失电、主触点断开，电动机停止。停止按钮为常闭触点，按下会立即切断控制回路。',
+  ],
+  self_lock: [
+    '按下启动按钮时，KM1 线圈得电，主触点闭合使电动机运转，同时 KM1 辅助常开触点也闭合。',
+    '辅助触点与启动按钮并联，松开启动按钮后，它仍为线圈提供通路，这就是“自锁”。按下停止按钮会切断整个控制回路，KM1 失电，电动机停止，自锁解除。',
+  ],
+  self_lock_overload: [
+    '启动和自锁过程与普通自锁电路相同：KM1 线圈得电后，主触点给电动机送三相电，辅助触点维持线圈得电。',
+    'FR 热继电器负责过载保护。电动机电流过大时，FR 常闭触点断开，使 KM1 线圈失电并切断主回路。故障排除并复位 FR 后，还要重新按启动按钮，电动机才会再次运行。',
+  ],
+  seq_start: [
+    '先启动 M1：KM1 线圈得电并自锁，KM1 主触点闭合，M1 运转；同时 KM1 的辅助常开触点闭合，为 M2 的控制支路做好通电条件。',
+    '只有 M1 已运行时，按下 M2 启动按钮才能使 KM2 得电并带动 M2。停止 M1 会让顺序触点断开，M2 也随之停止；FR1 或 FR2 过载时，公共控制回路被切断，两台电机都停止。',
+  ],
+  interlock: [
+    '两只接触器分别控制两个工作方向（或两个挡位），但它们不能同时吸合。每个线圈回路中都串入了对方的辅助常闭触点。',
+    'KM1 吸合后，它的常闭触点断开，KM2 无法得电；KM2 吸合时同样会阻止 KM1 得电。这种互相锁住的保护叫“电气互锁”，可防止主回路发生冲突或短路。',
+  ],
+  traction: [
+    '① 合上 QF1：三相主电源接通，HL1～HL3 亮，表示三相电源正常；但此时控制回路还没有工作。',
+    `② 合上 QF2：控制电源接通，ZN96 时间继电器开始计时。等待 ${TIMER_DELAY_SECONDS} 秒后，KT1 延时触点自动闭合，启动条件成立。`,
+    '③ 按下 SB1：KM1 线圈得电并通过辅助触点自锁，松开按钮后仍保持吸合；KM1 主触点闭合，MF1、MF2 风机启动，为牵引设备通风散热。SB2 用于停止 KM1。',
+    '④ 操作 SA2 选挡：全速挡使 KM2 吸合，接入 60V 抽头，经整流后约为 81V；半速挡使 KM3 吸合，接入 30V 抽头，经整流后约为 40.5V。KM2 与 KM3 互锁，不能同时吸合。',
+    '⑤ 只有 KM1 已吸合且 KM2、KM3 中有一个挡位接通时，牵引电动机才会转动。PA1 显示电流，PV1 显示电压。断开 QF2 后，控制回路失电，计时器和各接触器复位。',
+  ],
+};
+
 export default function App() {
   const [practice, setPractice] = useState<Practice>(DEFAULT_PRACTICE);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(INITIAL_NODES);
@@ -569,6 +604,13 @@ export default function App() {
             开关：点击切换合/断。<br />
             按钮：按住生效，松开复位。<br />
             删线：选中线后按 Delete 键。
+          </div>
+          <div className="tips principle">
+            <div className="section-label">电路原理</div>
+            <div className="principle-intro">当前练习：{practice.name}</div>
+            {(PRACTICE_PRINCIPLES[practice.key] ?? []).map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
           </div>
           <div className="legend">
             <div className="section-label">线缆标识</div>
